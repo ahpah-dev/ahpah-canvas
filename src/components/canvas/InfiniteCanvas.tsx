@@ -71,6 +71,7 @@ interface InfiniteCanvasProps {
   onSpawnWorker: (parentCardId: string) => void;
   onStopPrompt: (cardId: string) => void;
   onOpenSettings: () => void;
+  onOpenCode: () => void;
   isSimulated: boolean;
 }
 
@@ -132,6 +133,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     onSpawnWorker: (id: string) => propsRef.current.onSpawnWorker(id),
     onStopPrompt: (id: string) => propsRef.current.onStopPrompt(id),
     onOpenSettings: () => propsRef.current.onOpenSettings(),
+    onOpenCode: () => propsRef.current.onOpenCode(),
   }), []);
   const [grid, setGrid] = useState(() => loadAppearance().grid !== "none");
   useEffect(() => {
@@ -664,7 +666,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
 }
 type CardActions = Pick<InfiniteCanvasProps,
   "onSelectCard" | "onUpdateCard" | "onDeleteCard" | "onExecutePrompt" |
-  "onApprovePlan" | "onSpawnWorker" | "onStopPrompt" | "onOpenSettings">;
+  "onApprovePlan" | "onSpawnWorker" | "onStopPrompt" | "onOpenSettings" | "onOpenCode">;
 
 // Camera transforms move the world without rerendering every conversation or embedded preview.
 const CanvasCardNode = memo(function CanvasCardNode({ card, isSelected, actions, isSimulated, providerConfigRevision }: {
@@ -690,6 +692,7 @@ const CanvasCardNode = memo(function CanvasCardNode({ card, isSelected, actions,
         onSpawnWorker={actions.onSpawnWorker}
         onStopPrompt={actions.onStopPrompt}
         onOpenSettings={actions.onOpenSettings}
+        onOpenCode={actions.onOpenCode}
         isSimulated={isSimulated}
         providerConfigRevision={providerConfigRevision}
       />}

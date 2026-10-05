@@ -24,12 +24,15 @@ import { WorkspaceModal } from "./components/canvas/WorkspaceModal";
 import { SettingsModal } from "./components/canvas/SettingsModal";
 import { OneClickSetupModal } from "./components/canvas/OneClickSetupModal";
 import { VoiceBar } from "./components/canvas/VoiceBar";
-import { loadGatewayConfig, sendGatewayPrompt } from "./utils/gateways";
+import { loadGatewayConfig, sendGatewayPrompt, supportsLocalBridge } from "./utils/gateways";
 import { COMPLETION_TIMEOUT_MESSAGE } from "./utils/gatewayPolicy";
 import { validateCards, validateWorkspace } from "./utils/workspaceValidation";
 import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
+import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
+
+const CodingWorkspace = React.lazy(() => import("./components/engineering/CodingWorkspace").then((module) => ({ default: module.CodingWorkspace })));
 
 const LEGACY_SAMPLE_IDS = new Set([
   "card-omniroute-lead",
@@ -110,9 +113,10 @@ function migrateLegacyCards(cards: CanvasCard[]): CanvasCard[] {
 import confetti from "canvas-confetti";
 
 export function App() {
-  const [currentView, setCurrentView] = useState<"site" | "canvas">(() =>
-    readSavedValue("ahpah_view") === "canvas" ? "canvas" : "site",
-  );
+  const [currentView, setCurrentView] = useState<"site" | "canvas" | "code">(() => {
+    const saved = readSavedValue("ahpah_view");
+    return saved === "canvas" || saved === "code" ? saved : "site";
+  });
   const [cards, setCards] = useState<CanvasCard[]>(() => {
     const saved = readSavedValue("ahpah_cards_v3");
     if (saved) {
@@ -190,6 +194,7 @@ export function App() {
     sequence: number;
   } | null>(null);
   const [configVersion, setConfigVersion] = useState(0);
+  const [codingProviders, setCodingProviders] = useState(() => engineeringProviders(loadGatewayConfig()));
   const persistenceRef = useRef<ReturnType<typeof createDeferredPersistence> | null>(null);
   const cardsRef = useRef(cards);
   useLayoutEffect(() => {
@@ -207,7 +212,9 @@ export function App() {
   useEffect(() => {
     const refresh = () => {
       setConfigVersion((value) => value + 1);
-      const providers = loadGatewayConfig().customProviders || [];
+      const config = loadGatewayConfig();
+      setCodingProviders(engineeringProviders(config));
+      const providers = config.customProviders || [];
       setCards((previous) => previous.map((card) => {
         const provider = card.agentType === "custom" ? providers.find((item) => item.id === card.providerId) : undefined;
         return provider && provider.name !== card.providerName ? { ...card, providerName: provider.name, title: provider.name } : card;
@@ -836,7 +843,7 @@ export function App() {
 
   return (
     <div
-      className={`min-h-screen bg-[#08090f] text-slate-100 flex flex-col font-sans overflow-x-clip ${currentView === "canvas" ? "cw-app" : ""}`}
+      className={`min-h-screen bg-[#08090f] text-slate-100 flex flex-col font-sans overflow-x-clip ${currentView !== "site" ? "cw-app" : ""}`}
       onClickCapture={handleInteractionFeedback}
     >
       {/* Top Navbar */}
@@ -851,15 +858,26 @@ export function App() {
         activeAgentsCount={activeAgentsCount}
       />
 
-      {/* Main Content Area: Site or Full Infinite Canvas */}
+      {/* Landing page and engineering workspaces */}
       <main className="flex-1 relative">
         {currentView === "site" ? (
           <LandingPage
+            onLaunchCode={() => setCurrentView("code")}
             onLaunchCanvas={() => setCurrentView("canvas")}
             onOpenMemory={() => setIsMemoryOpen(true)}
             onOpenWorkspaces={() => setIsWorkspacesOpen(true)}
-            onOpenOneClickSetup={() => { setCurrentView("canvas"); setIsSettingsOpen(true); }}
+            onOpenOneClickSetup={() => { setCurrentView("code"); setIsSettingsOpen(true); }}
           />
+        ) : currentView === "code" ? (
+          <React.Suspense fallback={<div className="cw-tool-empty" role="status"><h2>Opening your coding workspace…</h2></div>}>
+            <CodingWorkspace
+              key="engineering-workspace"
+              send={sendEngineeringStep}
+              providers={codingProviders}
+              localExecution={supportsLocalBridge()}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+            />
+          </React.Suspense>
         ) : (
           <div className="cw-shell">
             <MissionControl
@@ -871,6 +889,7 @@ export function App() {
               onBroadcastPrompt={handleBroadcastPrompt}
               onOpenMemory={() => setIsMemoryOpen(true)}
               onOpenWorkspaces={() => setIsWorkspacesOpen(true)}
+              onOpenCode={() => setCurrentView("code")}
               selectedCardId={selectedCardId}
             />
             <div className="cw-workarea">
@@ -890,6 +909,7 @@ export function App() {
                 onSpawnWorker={handleSpawnWorker}
                 onStopPrompt={handleStopPrompt}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenCode={() => setCurrentView("code")}
                 isSimulated={isSimulated}
               />
               <VoiceBar

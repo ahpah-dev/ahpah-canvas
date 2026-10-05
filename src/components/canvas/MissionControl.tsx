@@ -6,6 +6,7 @@ import {
   Radio,
   Sparkles,
   FileText,
+  FileCode2,
   Globe,
   Terminal,
   Search,
@@ -24,6 +25,7 @@ interface MissionControlProps {
   onBroadcastPrompt: (prompt: string) => void;
   onOpenMemory: () => void;
   onOpenWorkspaces: () => void;
+  onOpenCode?: () => void;
   selectedCardId: string | null;
 }
 export function MissionControl({
@@ -34,6 +36,7 @@ export function MissionControl({
   onFocusCard,
   onOpenMemory,
   onOpenWorkspaces,
+  onOpenCode,
   selectedCardId,
 }: MissionControlProps) {
   const [search, setSearch] = useState("");
@@ -55,7 +58,7 @@ export function MissionControl({
         {isOpen && (
           <div>
             <h2>Mission Control</h2>
-            <p>Your work, in one frame.</p>
+            <p>Agents, reviews, and project context.</p>
           </div>
         )}
         <button
@@ -165,6 +168,11 @@ export function MissionControl({
             )}
           </div>
           <div className="cw-sidebar-footer">
+            {onOpenCode && <button onClick={onOpenCode}>
+              <FileCode2 size={14} />
+              <div>Code workspace<small>Files, agent tasks & reviewed edits</small></div>
+              <ChevronRight size={13} />
+            </button>}
             <button onClick={onOpenMemory}>
               <Database size={14} />
               <div>
@@ -189,6 +197,7 @@ export function MissionControl({
         </>
       ) : (
         <div className="cw-sidebar-rail">
+          {onOpenCode && <button aria-label="Open code workspace" onClick={onOpenCode}><FileCode2 size={17} /></button>}
           <button aria-label="Open project memory" onClick={onOpenMemory}>
             <Database size={17} />
           </button>

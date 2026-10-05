@@ -2848,3 +2848,189 @@ html[data-canvas-motion="subtle"] .lp-site-nav * {
     animation:lp-orbit-pulse 1.8s ease-out 1
   }
 }
+
+/* Engineering workspace preview and shared view switch. */
+.cw-nav-views {
+  display:flex;align-items:center;gap:3px;padding:4px;
+  background:var(--cw-panel-raised,#181220);
+  border:1px solid var(--cw-border,#ffffff10);border-radius:10px;flex-shrink:0
+}
+.cw-nav-views button {
+  display:flex;align-items:center;justify-content:center;gap:7px;padding:7px 12px;
+  border-radius:6px;color:var(--cw-muted,#92869f);font-size:11px;cursor:pointer;
+  transition:background var(--cw-motion-duration,200ms),color var(--cw-motion-duration,200ms)
+}
+.cw-nav-views button:hover { color:var(--cw-text,#eee5ff);background:#a996ff0a }
+.cw-nav-views button[aria-pressed=true] {
+  color:var(--cw-text,#eee5ff);background:color-mix(in srgb,var(--cw-accent,#9470e8) 16%,var(--cw-panel,#181220));
+  box-shadow:inset 0 1px #ffffff08
+}
+.cw-nav-views button:focus-visible { outline:2px solid var(--cw-accent,#b19aed);outline-offset:3px }
+.lp-engineering-showcase .lp-app-frame {
+  --lp-panel:#11111b;--lp-editor:#0d0f18;--lp-panel-line:#ffffff0a;
+  --lp-editor-text:#c2bfd4;--lp-panel-muted:#787288;--lp-panel-title:#b4a5cc;
+  --lp-highlight:#a489f40a
+}
+.lp-engineering-body {
+  display:grid;grid-template-columns:185px minmax(0,1fr) 292px;
+  min-height:420px;text-align:left;color:var(--lp-editor-text);background:var(--lp-editor)
+}
+.lp-file-tree,.lp-engineering-agent { background:var(--lp-panel);min-width:0 }
+.lp-file-tree { border-right:1px solid var(--lp-panel-line);display:flex;flex-direction:column }
+.lp-engineering-panel-label {
+  display:flex;align-items:center;gap:7px;height:45px;padding:0 14px;
+  border-bottom:1px solid var(--lp-panel-line);font-size:8px;letter-spacing:.06em;color:var(--lp-panel-title)
+}
+.lp-engineering-panel-label>span {
+  margin-left:auto;font:6px 'Fira Code',monospace;letter-spacing:.08em;
+  padding:3px 4px;border:1px solid var(--lp-panel-line);border-radius:3px;color:var(--lp-panel-muted)
+}
+.lp-file-tree>p { display:flex;align-items:center;gap:5px;padding:17px 10px 8px;font-size:9px;margin:0;color:var(--lp-panel-title) }
+.lp-tree-folder { display:flex;align-items:center;gap:6px;padding:7px 15px;font-size:9px;color:var(--lp-panel-muted) }
+.lp-tree-file { display:flex;align-items:center;gap:7px;height:30px;padding:0 12px 0 37px;font:8px 'Fira Code',monospace;color:var(--lp-panel-muted) }
+.lp-tree-file.selected { color:#c7b5ed;background:var(--lp-highlight);border-left:2px solid #a98ad9;padding-left:35px }
+.lp-tree-file.root { padding-left:24px }
+.lp-tree-file>i { width:4px;height:4px;margin-left:auto;border-radius:50%;background:#bca2e9 }
+.lp-tree-context { display:flex;flex-direction:column;gap:8px;margin:35px 14px 20px;margin-top:auto;padding-top:25px;color:var(--lp-panel-muted) }
+.lp-tree-context>svg { color:#a791c9 }
+.lp-tree-context>strong { font-size:9px;font-weight:500;color:var(--lp-panel-title) }
+.lp-tree-context>span { font-size:9px;line-height:1.7 }
+.lp-code-editor { display:flex;flex-direction:column;min-width:0 }
+.lp-editor-tabs { display:flex;align-items:center;justify-content:space-between;height:45px;border-bottom:1px solid var(--lp-panel-line);background:var(--lp-panel) }
+.lp-editor-tabs>span { display:flex;align-items:center;gap:7px;height:100%;padding:0 17px;border-right:1px solid var(--lp-panel-line);border-top:1px solid #a489cf;font-size:9px;color:var(--lp-panel-title);background:var(--lp-editor) }
+.lp-editor-tabs i { display:inline-block;width:5px;height:5px;border-radius:50%;background:#a98ccb;margin-left:20px }
+.lp-editor-tabs small { font:7px 'Fira Code',monospace;color:var(--lp-panel-muted);padding-right:15px }
+.lp-editor-breadcrumb { padding:12px 16px;font-size:8px;color:var(--lp-panel-muted) }
+.lp-editor-breadcrumb>span { margin:0 7px;color:#554865 }
+.lp-code-editor-body { overflow:hidden;padding:7px 0 18px;flex:1;animation:lp-scene-in var(--lp-motion-duration) ease both }
+.lp-editor-line { display:flex;align-items:center;min-height:17px;font:9px/1.85 'Fira Code',Consolas,monospace;white-space:pre }
+.lp-editor-line>span { width:43px;flex-shrink:0;text-align:right;padding-right:14px;color:color-mix(in srgb,var(--lp-panel-muted) 65%,transparent);user-select:none }
+.lp-editor-line>code { padding-left:8px;color:var(--lp-editor-text) }
+.lp-editor-line.highlighted { background:var(--lp-highlight) }
+.lp-editor-status { display:flex;align-items:center;justify-content:space-between;gap:12px;height:29px;flex-shrink:0;border-top:1px solid var(--lp-panel-line);padding:0 13px;color:var(--lp-panel-muted);font-size:7px }
+.lp-editor-status>span { display:flex;align-items:center;gap:7px }
+.lp-editor-status i { width:2px;height:2px;border-radius:50%;background:var(--lp-panel-muted) }
+.lp-engineering-agent { border-left:1px solid var(--lp-panel-line);display:flex;flex-direction:column }
+.lp-task-prompt { margin:16px 15px 4px;padding:12px 13px;border:1px solid #b498db18;border-radius:9px;background:var(--lp-highlight) }
+.lp-task-prompt>span { color:#ad96cb;font:7px 'Fira Code',monospace;letter-spacing:.1em }
+.lp-task-prompt>p { font-size:10px;line-height:1.75;margin:7px 0 0;color:var(--lp-editor-text) }
+.lp-tool-timeline { margin:15px;animation:lp-scene-in var(--lp-motion-duration) ease both }
+.lp-tool-timeline>div { display:flex;align-items:center;gap:8px;position:relative;min-height:48px }
+.lp-tool-timeline>div>span { display:grid;place-items:center;width:26px;height:26px;flex-shrink:0;border:1px solid #ab8ccc18;border-radius:7px;color:#b89ed6;background:var(--lp-highlight) }
+.lp-tool-timeline>div+div::before { content:'';position:absolute;left:13px;top:-7px;height:14px;width:1px;background:#ab8ccc16 }
+.lp-tool-timeline p { margin:0;font-size:9px;color:var(--lp-panel-title);min-width:0 }
+.lp-tool-timeline small { display:block;margin-top:4px;font-size:8px;color:var(--lp-panel-muted) }
+.lp-tool-timeline>div>svg { margin-left:auto;color:#7aae9a;flex-shrink:0 }
+.lp-staged-review { border:1px solid #ac8fd820;border-radius:9px;margin:0 15px 16px;padding:12px;background:var(--lp-highlight) }
+.lp-staged-review>span { display:flex;align-items:center;gap:6px;font-size:8px;color:var(--lp-panel-title) }
+.lp-staged-review small { margin-left:auto;color:#80b99d;font:8px 'Fira Code',monospace }
+.lp-staged-review small i { color:#c58b95;font-style:normal;margin-left:5px }
+.lp-staged-review p { margin:11px 0;font-size:9px;line-height:1.6;color:var(--lp-panel-muted) }
+.lp-staged-review button { width:100%;display:flex;align-items:center;justify-content:center;gap:15px;padding:9px;background:#a584ce22;border:1px solid #c3a6e532;border-radius:6px;color:#d1bbea;font-size:9px;transition:background var(--lp-motion-duration) }
+.lp-staged-review button:hover { background:#a584ce37 }
+.lp-agent-context { display:flex;align-items:center;gap:6px;margin-top:auto;padding:0 15px 12px;color:var(--lp-panel-muted);font-size:7px }
+.lp-engineering-runbar { display:flex;align-items:center;justify-content:space-between;gap:15px;min-height:42px;padding:0 17px;border-top:1px solid var(--lp-panel-line);background:var(--lp-panel);color:var(--lp-panel-muted);font-size:9px }
+.lp-engineering-runbar>span,.lp-engineering-runbar>button { display:flex;align-items:center;gap:9px }
+.lp-engineering-runbar>button { color:#bfa2dd;font-size:9px;padding:10px 0 }
+.lp-engineering-runbar>button:hover { color:#e4d0fc }
+.lp-file-art { position:absolute;right:25px;bottom:31px;width:45%;max-width:280px;background:#111019;border:1px solid #b199d42b;border-radius:12px;box-shadow:0 20px 60px #0003;transform:rotate(-4deg);transition:transform var(--lp-motion-duration) var(--lp-ease) }
+.lp-feature-wide:hover .lp-file-art { transform:rotate(-2deg) translateY(-3px) }
+.lp-file-art-title { display:flex;align-items:center;gap:7px;padding:17px 15px;border-bottom:1px solid #ffffff08;font-size:10px;color:#b8a6d0 }
+.lp-file-art-title>span { margin-left:auto;font-size:6px;letter-spacing:.08em;color:#756885 }
+.lp-file-art>div:not(:first-child) { display:flex;align-items:center;gap:8px;padding:13px 15px;font-size:9px;color:#9784ad }
+.lp-file-art>div.selected { margin:2px 8px;padding:12px 7px;background:#a480d61b;border:1px solid #a480d620;border-radius:7px;color:#c7addf }
+.lp-file-art small { margin-left:auto;font-size:6px;letter-spacing:.07em;color:#9275b1 }
+.lp-file-art footer { display:flex;align-items:center;gap:8px;padding:15px;color:#91819f;border-top:1px solid #ffffff08;font-size:8px }
+.lp-feature-review { background:radial-gradient(ellipse at 95% 85%,#63449715,transparent 65%),#101019 }
+.lp-diff-art { margin:24px 23px 0;background:#0c0e16;border:1px solid #af92d122;border-radius:9px;overflow:hidden;box-shadow:0 12px 25px #0003 }
+.lp-diff-art header { display:flex;align-items:center;gap:7px;padding:12px 13px;font-size:9px;color:#a694bc;border-bottom:1px solid #ffffff09 }
+.lp-diff-art header>span { margin-left:auto;font:8px 'Fira Code',monospace;color:#82bda0 }
+.lp-diff-art>div { display:flex;gap:10px;padding:5px 13px;font:8px/1.7 'Fira Code',monospace;white-space:nowrap }
+.lp-diff-art .added { color:#9fcab0;background:#79c4980b }
+.lp-diff-art .removed { color:#cc9f9f;background:#c47a7a0b }
+.lp-diff-art footer { display:flex;align-items:center;gap:8px;padding:13px;font-size:8px;color:#a28caf;border-top:1px solid #ffffff07 }
+.lp-diff-art footer>svg:nth-of-type(2) { margin-left:auto }
+.lp-feature-preview { display:flex;flex-direction:column;justify-content:space-between }
+.lp-browser-art { margin:22px 23px 0;border:1px solid #a892cb25;border-radius:9px;background:#10101b;overflow:hidden;box-shadow:0 12px 25px #0003 }
+.lp-browser-art>header { display:flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-bottom:1px solid #ffffff07 }
+.lp-browser-art>header i { width:4px;height:4px;background:#937faa;border-radius:50% }
+.lp-browser-art>header span { margin-left:auto;font:6px 'Fira Code',monospace;letter-spacing:.07em;color:#766283 }
+.lp-browser-art>div { display:flex;height:100px }
+.lp-mini-browser-side { display:flex;flex-direction:column;gap:11px;padding:20px 13px;width:65px;border-right:1px solid #ffffff06;background:#ffffff02 }
+.lp-mini-browser-side span { height:4px;border-radius:3px;background:#a797be17 }
+.lp-mini-browser-side span:first-child { background:#b596e55c }
+.lp-mini-browser-main { flex:1;padding:14px 14px }
+.lp-mini-browser-main>span { font-size:9px;color:#c7b2e2;font-weight:550 }
+.lp-mini-browser-main>div { display:flex;gap:7px;margin:10px 0 }
+.lp-mini-browser-main i { width:30%;height:27px;border:1px solid #b599d827;border-radius:5px;background:linear-gradient(120deg,#ba9ee715,#7298ac08) }
+.lp-mini-browser-main p { height:3px;width:90%;margin:6px 0;background:#a59aba1a;border-radius:2px }
+.lp-mini-browser-main p:last-child { width:60% }
+.lp-browser-art>footer { display:flex;align-items:center;gap:6px;padding:9px 11px;font-size:7px;color:#8e7c9d;border-top:1px solid #ffffff07 }
+.lp-command-art { margin:24px 23px 22px;border:1px solid #b493dc20;border-radius:9px;padding:16px;background:#0f0d17 }
+.lp-command-art>span { display:flex;align-items:center;gap:7px;font-size:7px;letter-spacing:.07em;color:#9d85b7 }
+.lp-command-art>code { display:block;padding:15px 0;color:#d3c1e8;font:12px 'Fira Code',monospace }
+.lp-command-art>div { display:flex;align-items:center;gap:7px;font-size:8px;color:#b89c7d;border-top:1px solid #b493dc10;padding-top:12px }
+.lp-workflow-note { display:flex;align-items:center;justify-content:center;gap:12px;padding-top:25px;color:#9587aa }
+.lp-workflow-note p { margin:0;font-size:11px;line-height:1.8 }
+.lp-workflow-note p>span { color:#6e657d;font-size:10px }
+.lp-preview-light .lp-app-frame {
+  --lp-panel:#f4f1f8;--lp-editor:#fcfaff;--lp-panel-line:#54336514;
+  --lp-editor-text:#564662;--lp-panel-muted:#95859f;--lp-panel-title:#665274;
+  --lp-highlight:#9872c10b
+}
+.lp-preview-light .lp-tree-file.selected { color:#71518f }
+.lp-preview-light .lp-code-purple { color:#8551a7 }
+.lp-preview-light .lp-code-green { color:#467e6b }
+.lp-preview-light .lp-code-blue { color:#398096 }
+.lp-preview-light .lp-task-prompt>span { color:#9063b0 }
+.lp-preview-light .lp-staged-review button { color:#7e5799;border-color:#9a75b740 }
+.lp-preview-light .lp-agent-context { color:#93839e }
+.lp-preview-light .lp-engineering-runbar>button { color:#8865a2 }
+@media(max-width:1000px) {
+  .lp-engineering-body { grid-template-columns:155px minmax(0,1fr) 255px }
+  .lp-editor-tabs small { display:none }
+  .lp-engineering-panel-label { padding-inline:11px;font-size:7px }
+  .lp-tree-file { padding-left:30px;font-size:7px }
+  .lp-tree-file.selected { padding-left:28px }
+  .lp-editor-line { font-size:8px }
+  .cw-nav { gap:15px }
+  .cw-nav-project { font-size:9px;gap:5px }
+}
+@media(max-width:850px) {
+  .lp-engineering-body { grid-template-columns:minmax(0,1fr) 265px }
+  .lp-file-tree { display:none }
+  .lp-file-art { width:44%;right:20px }
+}
+@media(max-width:600px) {
+  .cw-nav-views { padding:3px }
+  .cw-nav-views button { padding:7px 9px;font-size:10px;gap:5px }
+  .cw-nav-views button svg { width:12px;height:12px }
+  .lp-engineering-body { grid-template-columns:minmax(0,1fr);min-height:0 }
+  .lp-code-editor-body { padding-bottom:20px;max-height:330px }
+  .lp-editor-line { font-size:8px;min-height:16px }
+  .lp-editor-line>span { width:32px;padding-right:10px }
+  .lp-engineering-agent { border-left:0;border-top:1px solid var(--lp-panel-line) }
+  .lp-engineering-agent .lp-engineering-panel-label { height:36px }
+  .lp-task-prompt { margin:12px 14px 0;padding:10px 12px }
+  .lp-task-prompt>p { font-size:10px;margin-top:5px }
+  .lp-tool-timeline { display:none }
+  .lp-staged-review { margin:12px 14px }
+  .lp-staged-review>p { margin-block:8px }
+  .lp-agent-context { padding-bottom:12px }
+  .lp-engineering-runbar { padding:0 13px;font-size:7px;gap:8px }
+  .lp-engineering-runbar>span { font-size:6px;gap:4px }
+  .lp-engineering-runbar>button { font-size:8px;gap:5px }
+  .lp-engineering-runbar>span svg { display:none }
+  .lp-file-art { position:relative;right:auto;bottom:auto;width:calc(100% - 52px);max-width:300px;margin:24px auto 30px;transform:rotate(-2deg) }
+  .lp-file-art-title>span { display:none }
+  .lp-file-art>div:not(:first-child) { font-size:8px;gap:6px;padding:10px }
+  .lp-file-art small { font-size:5px }
+  .lp-file-art footer { font-size:7px;padding:11px }
+  .lp-workflow-note { align-items:flex-start;gap:9px }
+  .lp-workflow-note>svg { margin-top:5px;flex-shrink:0 }
+  .lp-workflow-note p { font-size:10px }
+  .lp-workflow-note p>span { font-size:9px }
+  .lp-footer nav { gap:12px }
+  .lp-announcement>span:first-child { display:flex;font-size:8px }
+  .lp-showcase-caption>span { max-width:100% }
+}

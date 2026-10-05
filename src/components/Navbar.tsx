@@ -1,14 +1,17 @@
 import React from "react";
 import {
   ArrowUpRight,
+  Code2,
   Database,
   FolderKanban,
+  Layers3,
   Settings,
 } from "lucide-react";
+import { supportsLocalBridge } from "../utils/gateways";
 
 interface NavbarProps {
-  currentView: "site" | "canvas";
-  onSwitchView: (view: "site" | "canvas") => void;
+  currentView: "site" | "canvas" | "code";
+  onSwitchView: (view: "site" | "canvas" | "code") => void;
   onOpenMemory: () => void;
   onOpenWorkspaces: () => void;
   onOpenSettings: () => void;
@@ -52,8 +55,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           AhPah <span>Canvas</span>
         </button>
         <nav className="lp-nav-links" aria-label="Main navigation">
-          <a href="#workspace">Workspace</a>
-          <a href="#workflow">Features</a>
+          <a href="#workspace">Code workspace</a>
+          <a href="#workflow">How it works</a>
           <a href="#providers">Providers</a>
         </nav>
         <div className="lp-nav-actions">
@@ -67,9 +70,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             className="lp-nav-launch"
-            onClick={() => onSwitchView("canvas")}
+            onClick={() => onSwitchView("code")}
           >
-            Open canvas <ArrowUpRight size={14} />
+            Start coding <ArrowUpRight size={14} />
           </button>
         </div>
       </div>
@@ -91,13 +94,30 @@ export const Navbar: React.FC<NavbarProps> = ({
           AhPah <span>Canvas</span>
         </strong>
       </button>
+      <div className="cw-nav-views" role="group" aria-label="Workspace view">
+        <button
+          type="button"
+          aria-pressed={currentView === "code"}
+          onClick={() => onSwitchView("code")}
+        >
+          <Code2 size={14} /> <span>Code</span>
+        </button>
+        <button
+          type="button"
+          aria-pressed={currentView === "canvas"}
+          onClick={() => onSwitchView("canvas")}
+        >
+          <Layers3 size={14} /> <span>Canvas</span>
+        </button>
+      </div>
       <div className="cw-nav-project">
         <span>/</span>
         <FolderKanban size={13} />
-        <span>My workspace</span>
-        <span className="cw-nav-local">LOCAL</span>
+        <span>{currentView === "code" ? "Engineering workspace" : "My workspace"}</span>
+        <span className="cw-nav-local">{supportsLocalBridge() ? "LOCAL" : "BROWSER"}</span>
       </div>
       <nav aria-label="Workspace navigation">
+        {currentView === "canvas" && <>
         <button onClick={onOpenMemory} aria-label="Project memory">
           <Database size={14} />
           <span>Memory</span>
@@ -107,9 +127,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <FolderKanban size={14} />
           <span>Workspaces</span>
         </button>
+        </>}
         <button onClick={onOpenSettings} aria-label="Settings">
           <Settings size={15} />
-          <span>Settings</span>
+          <span>{currentView === "code" ? "Models & settings" : "Settings"}</span>
         </button>
       </nav>
     </header>

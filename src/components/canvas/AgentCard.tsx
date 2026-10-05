@@ -35,6 +35,7 @@ interface AgentCardProps {
   onSpawnWorker?: (parentCardId: string) => void;
   onStopPrompt: (cardId: string) => void;
   onOpenSettings: () => void;
+  onOpenCode?: () => void;
   isSimulated: boolean;
   providerConfigRevision: number;
 }
@@ -115,6 +116,7 @@ function AgentCardBody({
   onSpawnWorker,
   onStopPrompt,
   onOpenSettings,
+  onOpenCode,
   isSimulated,
   providerConfigRevision,
 }: AgentCardProps) {
@@ -299,26 +301,30 @@ function AgentCardBody({
             </span>
             <h3>
               {kilo
-                ? "A fresh perspective, on demand."
-                : "Your next idea starts here."}
+                ? "A second set of eyes for your code."
+                : "Plan a change. Review the approach."}
             </h3>
             <p>
               {kilo && !supportsLocalBridge()
                 ? "Kilo needs the local app because its API blocks browser connections. You can connect a browser-compatible custom API in Settings."
                 : kilo
-                ? "Let Kilo select a current free model, then give it a task."
-                : "Connect your gateway, choose a model, and bring your ideas to life."}
+                ? "Use a live model to discuss an implementation, review pasted code, or work through a bug."
+                : "Choose a live model to discuss your code. Open Code to work with project files and review edits."}
             </p>
             {kilo && !supportsLocalBridge() && <a className="cw-text-button" href="https://github.com/ahpah-dev/ahpah-canvas#start-locally" target="_blank" rel="noreferrer">Run locally <ChevronRight size={12} /></a>}
             <div className="cw-welcome-prompts">
-              {["Explore an idea", "Review some code", "Make a plan"].map(
-                (value) => (
+              {[
+                ["Plan a feature", "Outline an implementation plan for this feature, including affected files and verification steps."],
+                ["Review code", "Review the code I provide for correctness, accessibility, and edge cases."],
+                ["Investigate a bug", "Help trace this bug from the observed behavior to its likely cause. Ask for the relevant code if needed."],
+              ].map(
+                ([label, value]) => (
                   <button
-                    key={value}
+                    key={label}
                     disabled={busy}
                     onClick={() => setPrompt(value)}
                   >
-                    {value}
+                    {label}
                     <ArrowUp size={10} />
                   </button>
                 ),
@@ -412,6 +418,9 @@ function AgentCardBody({
         </div>
       )}
       <div className="cw-card-quick">
+        {onOpenCode && <button onClick={onOpenCode} title="Work with project files and review proposed edits">
+          <FileCode2 size={11} /> Open Code
+        </button>}
         <button
           onClick={() => setShowQuick(!showQuick)}
           aria-expanded={showQuick}
@@ -427,9 +436,9 @@ function AgentCardBody({
       {showQuick && (
         <div className="cw-quick-suggestions">
           {[
-            "Summarize the context and suggest the next step.",
-            "Review this approach for problems and improvements.",
-            "Break this task into a practical implementation plan.",
+            "Review this code for bugs and suggest a minimal fix.",
+            "Plan this feature with file changes and verification steps.",
+            "Suggest regression cases for the behavior we just changed.",
           ].map((value) => (
             <button
               key={value}
@@ -462,7 +471,7 @@ function AgentCardBody({
               send();
             }
           }}
-          placeholder={`Message ${name}…`}
+          placeholder="Describe a change, paste code, or ask for a review…"
           rows={2}
         />
         <div>

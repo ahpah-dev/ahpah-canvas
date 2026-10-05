@@ -81,14 +81,17 @@ export function loadGatewayConfig(): GatewayConfig {
   } catch {
     /* Older installations use the individual keys below. */
   }
+  const savedValue = (key: string, fallback = "") => {
+    try { return localStorage.getItem(key) || fallback; }
+    catch { return fallback; }
+  };
   return {
     omniRouteUrl:
-      localStorage.getItem("ahpah_omniroute_url") ||
-      "http://localhost:20128/v1",
-    omniRouteKey: localStorage.getItem("ahpah_omniroute_key") || "",
-    omniRouteModel: localStorage.getItem("ahpah_omniroute_model") || "",
-    kiloKey: localStorage.getItem("ahpah_kilo_key") || "",
-    kiloModel: localStorage.getItem("ahpah_kilo_model") || "kilo-auto/free",
+      savedValue("ahpah_omniroute_url", "http://localhost:20128/v1"),
+    omniRouteKey: savedValue("ahpah_omniroute_key"),
+    omniRouteModel: savedValue("ahpah_omniroute_model"),
+    kiloKey: savedValue("ahpah_kilo_key"),
+    kiloModel: savedValue("ahpah_kilo_model", "kilo-auto/free"),
   };
 }
 
@@ -376,7 +379,7 @@ export async function sendGatewayPrompt(
       if (text.trim()) return { text, model: resolvedModel, tokens };
       if (choice?.finish_reason === "tool_calls" || message?.tool_calls?.length)
         throw new Error(
-          `${resolvedModel} returned a tool call without an answer. This canvas supports text responses; choose a text model.`,
+          `${resolvedModel} returned a tool call without an answer. This request expects text or structured coding actions in the response; choose a model that follows those instructions.`,
         );
       if (choice?.finish_reason === "error")
         throw new Error(

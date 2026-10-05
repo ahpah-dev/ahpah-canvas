@@ -2,7 +2,7 @@
   "name": "ahpah-canvas",
   "private": true,
   "version": "0.1.0",
-  "description": "An infinite canvas for live AI conversations, project notes, and connected model providers.",
+  "description": "An agentic coding workspace with project files, reviewed edits, previews, and connected model providers.",
   "license": "MIT",
   "author": "ahpah-dev",
   "repository": {

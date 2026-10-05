@@ -23,11 +23,11 @@ export const AGENT_REGISTRY: Record<AgentType, AgentDefinition> = {
     borderColor: 'border-cyan-500/50',
     bgGlow: 'shadow-[0_0_25px_rgba(6,182,212,0.2)]',
     description: 'OpenAI-compatible model gateway. Choose an available model from your live catalog.',
-    defaultRole: 'OmniRoute model',
+    defaultRole: 'Engineering planning & review',
     quickPrompts: [
-      'Explain this code and suggest a safe next step',
-      'Review this change for edge cases',
-      'Summarize the current project context',
+      'Review the code I provide for bugs and suggest a minimal fix',
+      'Plan this feature with affected files and verification steps',
+      'Explain the tradeoffs in this implementation',
     ],
   },
   kilo: {
@@ -39,7 +39,7 @@ export const AGENT_REGISTRY: Record<AgentType, AgentDefinition> = {
     borderColor: 'border-emerald-500/50',
     bgGlow: 'shadow-[0_0_25px_rgba(16,185,129,0.2)]',
     description: 'Kilo AI Gateway with dynamic Auto Free model routing.',
-    defaultRole: 'Kilo Auto Free',
+    defaultRole: 'Implementation & code review',
     quickPrompts: [
       'Refactor the auth middleware and explain the changes',
       'Generate tests for the selected module',
@@ -199,11 +199,11 @@ export const AGENT_REGISTRY: Record<AgentType, AgentDefinition> = {
     borderColor: 'border-purple-500/40',
     bgGlow: 'shadow-[0_0_20px_rgba(168,85,247,0.15)]',
     description: 'Connect your own OpenAI-compatible endpoint and choose an available model.',
-    defaultRole: 'Custom Automation',
+    defaultRole: 'Project engineering assistant',
     quickPrompts: [
-      'Run custom build script and monitor memory consumption',
-      'Execute database seed and verify table health',
-      'Run synthetic load test with k6',
+      'Plan this feature with file changes and verification steps',
+      'Review the code I provide for correctness and edge cases',
+      'Help isolate this bug and suggest a focused fix',
     ],
   },
 };
