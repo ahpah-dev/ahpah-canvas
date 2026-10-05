@@ -57,6 +57,23 @@ test("custom completions support streamed answers and report the actual returned
   assert.equal(result.model, "latest-model");
 });
 
+test("hosted HTTPS pages use direct APIs and reject HTTP providers before a request", async (t) => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { hostname: "ahpah-dev.github.io", protocol: "https:" } } });
+  t.after(() => descriptor ? Object.defineProperty(globalThis, "window", descriptor) : Reflect.deleteProperty(globalThis, "window"));
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    requests++;
+    assert.equal(url, "https://api.kilo.ai/api/gateway/models");
+    return response({ data: [{ id: "current-model" }] });
+  });
+  assert.equal(gatewayTransport({ ...config, transport: "bridge" }), "direct");
+  await assert.rejects(listCustomModels({ ...profile, baseUrl: "http://localhost:1234/v1" }, config), /HTTPS API URL/);
+  assert.equal(requests, 0);
+  await listKiloModels(undefined, config);
+  assert.equal(requests, 1);
+});
+
 test("deleted custom profiles fail before requests and credential-bearing errors are redacted", async (t) => {
   let requests = 0;
   t.mock.method(globalThis, "fetch", async () => { requests++; return response({ error: { message: `Invalid key ${profile.apiKey}` } }, 401); });

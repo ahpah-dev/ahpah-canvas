@@ -80,6 +80,12 @@
     background 0.2s,
     color 0.2s;
 }
+.cw-nav nav button[aria-label="Settings"] > svg {
+  transition: transform var(--cw-motion-duration) cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cw-nav nav button[aria-label="Settings"]:hover > svg {
+  transform: rotate(30deg);
+}
 .cw-nav nav button:hover {
   color: #dfd1ee;
   background: #ffffff05;
@@ -496,6 +502,8 @@
   background: #15101ef5;
   backdrop-filter: blur(20px);
   box-shadow: 0 20px 55px #0009;
+  animation: cw-menu-enter var(--cw-motion-duration) cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top right;
 }
 .cw-menu-heading {
   display: flex;
@@ -553,6 +561,19 @@
 .cw-canvas.is-moving,
 .cw-canvas.is-moving .card-drag-handle {
   cursor: grabbing;
+}
+.cw-canvas.is-moving .cw-card,
+.cw-canvas.is-moving .cw-card-position {
+  transition: none;
+}
+.cw-canvas.is-moving .cw-connection-layer path,
+.cw-canvas.is-moving .cw-thinking > i {
+  animation-play-state: paused;
+}
+.cw-canvas.is-moving .cw-toolbar,
+.cw-canvas.is-moving .cw-add-menu,
+.cw-canvas.is-moving .cw-minimap {
+  backdrop-filter: none;
 }
 .card-drag-handle {
   cursor: grab;
@@ -1733,6 +1754,16 @@
 @keyframes cw-flow {
   to {
     stroke-dashoffset: -70;
+  }
+}
+@keyframes cw-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 @keyframes cw-thinking {

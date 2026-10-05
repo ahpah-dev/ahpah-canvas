@@ -678,6 +678,12 @@ html[data-canvas-surface="daylight"] .cw-minimap {
 .cw-setup-diagnostics[open] summary svg {
   transform: rotate(180deg);
 }
+.cw-setup-diagnostics summary svg {
+  transition: transform var(--cw-motion-duration) cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cw-setup-diagnostics[open] ol {
+  animation: cw-content-in var(--cw-motion-duration) ease both;
+}
 .cw-setup-diagnostics ol {
   display: flex;
   flex-direction: column;
@@ -786,6 +792,7 @@ html[data-canvas-surface="daylight"] .cw-minimap {
 }
 .cw-surface-options .selected strong svg {
   opacity: 1;
+  animation: cw-option-selected var(--cw-motion-duration) ease both;
 }
 .cw-surface-options small {
   font-size: 9px;
@@ -871,6 +878,9 @@ html[data-canvas-surface="daylight"] .cw-minimap {
     0 0 0 3px var(--cw-panel),
     0 0 0 4px var(--cw-accent);
 }
+.cw-accent-options > button[aria-pressed="true"] svg {
+  animation: cw-option-selected var(--cw-motion-duration) ease both;
+}
 .cw-accent-options code {
   font:
     10px Consolas,
@@ -949,12 +959,10 @@ html[data-canvas-surface="daylight"] .cw-minimap {
   from {
     opacity: 0;
     transform: translateY(22px) scale(0.965);
-    filter: blur(3px);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 @keyframes cw-dialog-out {
@@ -971,6 +979,16 @@ html[data-canvas-surface="daylight"] .cw-minimap {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+@keyframes cw-option-selected {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 @keyframes cw-card-arrive {

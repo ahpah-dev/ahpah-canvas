@@ -27,6 +27,9 @@ import { VoiceBar } from "./components/canvas/VoiceBar";
 import { loadGatewayConfig, sendGatewayPrompt } from "./utils/gateways";
 import { COMPLETION_TIMEOUT_MESSAGE } from "./utils/gatewayPolicy";
 import { validateCards, validateWorkspace } from "./utils/workspaceValidation";
+import { createDeferredPersistence } from "./utils/interactionScheduling";
+import { handleInteractionFeedback } from "./utils/interactionFeedback";
+import { loadAppearance } from "./utils/appearance";
 
 const LEGACY_SAMPLE_IDS = new Set([
   "card-omniroute-lead",
@@ -35,6 +38,10 @@ const LEGACY_SAMPLE_IDS = new Set([
   "card-terminal-shell",
   "card-notes",
 ]);
+
+function readSavedValue(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
 
 function migrateLegacyCards(cards: CanvasCard[]): CanvasCard[] {
   return cards.map((card) => {
@@ -104,10 +111,10 @@ import confetti from "canvas-confetti";
 
 export function App() {
   const [currentView, setCurrentView] = useState<"site" | "canvas">(() =>
-    localStorage.getItem("ahpah_view") === "canvas" ? "canvas" : "site",
+    readSavedValue("ahpah_view") === "canvas" ? "canvas" : "site",
   );
   const [cards, setCards] = useState<CanvasCard[]>(() => {
-    const saved = localStorage.getItem("ahpah_cards_v3");
+    const saved = readSavedValue("ahpah_cards_v3");
     if (saved) {
       try {
         return migrateLegacyCards(validateCards(JSON.parse(saved))).map(
@@ -128,7 +135,7 @@ export function App() {
   });
 
   const [connections, setConnections] = useState<Connection[]>(() => {
-    const saved = localStorage.getItem("ahpah_connections_v3");
+    const saved = readSavedValue("ahpah_connections_v3");
     if (saved) {
       try {
         return validateWorkspace({
@@ -146,7 +153,7 @@ export function App() {
   });
 
   const [memory, setMemory] = useState<MemoryItem[]>(() => {
-    const saved = localStorage.getItem("ahpah_memory_v3");
+    const saved = readSavedValue("ahpah_memory_v3");
     if (saved) {
       try {
         const parsed = validateWorkspace({
@@ -182,7 +189,8 @@ export function App() {
     id: string;
     sequence: number;
   } | null>(null);
-  const [, setConfigVersion] = useState(0);
+  const [configVersion, setConfigVersion] = useState(0);
+  const persistenceRef = useRef<ReturnType<typeof createDeferredPersistence> | null>(null);
   const cardsRef = useRef(cards);
   useLayoutEffect(() => {
     cardsRef.current = cards;
@@ -247,26 +255,41 @@ export function App() {
       ),
     );
   };
-  // Sync state to LocalStorage
-  useEffect(() => {
-    let failed = false;
-    try {
-      localStorage.setItem("ahpah_view", currentView);
-      localStorage.setItem("ahpah_cards_v3", JSON.stringify(cards));
-      localStorage.setItem("ahpah_connections_v3", JSON.stringify(connections));
-      localStorage.setItem("ahpah_memory_v3", JSON.stringify(memory));
-    } catch {
-      failed = true;
-    }
-    const frame = window.requestAnimationFrame(() => setSaveError(failed));
-    return () => window.cancelAnimationFrame(frame);
+  // Buffer the latest committed snapshot. Streaming and gestures do not serialize the workspace.
+  useLayoutEffect(() => {
+    persistenceRef.current ??= createDeferredPersistence(
+      { setItem: (key, value) => localStorage.setItem(key, value) },
+      { set: (callback, delay) => window.setTimeout(callback, delay), clear: (id) => window.clearTimeout(id) },
+      setSaveError,
+    );
+    const persistence = persistenceRef.current;
+    persistence.schedule("ahpah_view", currentView);
+    persistence.schedule("ahpah_cards_v3", cards);
+    persistence.schedule("ahpah_connections_v3", connections);
+    persistence.schedule("ahpah_memory_v3", memory);
   }, [cards, connections, memory, currentView]);
+  useEffect(() => {
+    const flush = () => persistenceRef.current?.flush();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flush();
+    };
+  }, []);
 
   // Card update handler
   const handleUpdateCard = (id: string, updated: Partial<CanvasCard>) => {
-    setCards((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updated } : c)),
-    );
+    setCards((previous) => {
+      const card = previous.find((item) => item.id === id);
+      if (!card || !Object.entries(updated).some(([key, value]) =>
+        !Object.is(card[key as keyof CanvasCard], value))) return previous;
+      return previous.map((item) => item.id === id ? { ...item, ...updated } : item);
+    });
   };
 
   // Card delete handler
@@ -288,7 +311,8 @@ export function App() {
     setMemory(INITIAL_MEMORY);
     setCurrentView("canvas");
     setIsOneClickSetupOpen(false);
-    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+    if (loadAppearance().motion === "smooth")
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, disableForReducedMotion: true });
   };
 
   // Add Card
@@ -746,10 +770,12 @@ export function App() {
     setConnections(preset.connections);
     setMemory(preset.memory);
     setCurrentView("canvas");
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+    if (loadAppearance().motion === "smooth")
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, disableForReducedMotion: true });
   };
 
   const handleExportWorkspace = () => {
+    persistenceRef.current?.flush();
     const data = {
       project: "AhPah Canvas Workspace",
       version: "1.0.0",
@@ -811,6 +837,7 @@ export function App() {
   return (
     <div
       className={`min-h-screen bg-[#08090f] text-slate-100 flex flex-col font-sans overflow-x-clip ${currentView === "canvas" ? "cw-app" : ""}`}
+      onClickCapture={handleInteractionFeedback}
     >
       {/* Top Navbar */}
       <Navbar
@@ -848,6 +875,7 @@ export function App() {
             />
             <div className="cw-workarea">
               <InfiniteCanvas
+                providerConfigRevision={configVersion}
                 workspaceRevision={workspaceRevision}
                 cards={cards}
                 connections={connections}

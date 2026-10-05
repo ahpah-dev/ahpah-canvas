@@ -4,6 +4,8 @@ import React, {
   useEffect,
   useLayoutEffect,
   useCallback,
+  useMemo,
+  memo,
 } from "react";
 import {
   Plus,
@@ -40,6 +42,7 @@ import {
 } from "../../utils/canvasGeometry";
 import { cardName } from "../../utils/cardPresentation";
 import { loadGatewayConfig } from "../../utils/gateways";
+import { createFrameQueue } from "../../utils/interactionScheduling";
 import "./canvas.css";
 import {
   loadAppearance,
@@ -48,6 +51,7 @@ import {
 } from "../../utils/appearance";
 
 interface InfiniteCanvasProps {
+  providerConfigRevision: number;
   workspaceRevision: number;
   cards: CanvasCard[];
   connections: Connection[];
@@ -77,16 +81,58 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     selectedCardId,
     onSelectCard,
     onUpdateCard,
-    onDeleteCard,
   } = props;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [camera, setCamera] = useState<Camera>({ x: 40, y: 80, scale: 0.85 });
+  const [camera, setCameraState] = useState<Camera>({ x: 40, y: 80, scale: 0.85 });
+  const cameraRef = useRef(camera);
+  const propsRef = useRef(props);
   const cardsRef = useRef(cards);
   const selectedRef = useRef(selectedCardId);
   useLayoutEffect(() => {
     cardsRef.current = cards;
     selectedRef.current = selectedCardId;
-  }, [cards, selectedCardId]);
+    propsRef.current = props;
+  });
+  const applyCamera = useCallback((next: Camera) => {
+    cameraRef.current = next;
+    setCameraState(next);
+  }, []);
+  const framesRef = useRef<{
+    camera: ReturnType<typeof createFrameQueue<Camera>>;
+    card: ReturnType<typeof createFrameQueue<{ id: string; update: Partial<CanvasCard> }>>;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const scheduler = {
+      request: (callback: () => void) => window.requestAnimationFrame(callback),
+      cancel: (id: number) => window.cancelAnimationFrame(id),
+    };
+    const frames = {
+      camera: createFrameQueue(applyCamera, scheduler),
+      card: createFrameQueue<{ id: string; update: Partial<CanvasCard> }>(({ id, update }) => {
+        propsRef.current.onUpdateCard(id, update);
+      }, scheduler),
+    };
+    framesRef.current = frames;
+    return () => {
+      frames.camera.cancel();
+      frames.card.cancel();
+      framesRef.current = null;
+    };
+  }, [applyCamera]);
+  const setCamera = useCallback((value: Camera | ((previous: Camera) => Camera)) => {
+    framesRef.current?.camera.cancel();
+    applyCamera(typeof value === "function" ? value(cameraRef.current) : value);
+  }, [applyCamera]);
+  const cardActions = useMemo(() => ({
+    onSelectCard: (id: string | null) => propsRef.current.onSelectCard(id),
+    onUpdateCard: (id: string, update: Partial<CanvasCard>) => propsRef.current.onUpdateCard(id, update),
+    onDeleteCard: (id: string) => propsRef.current.onDeleteCard(id),
+    onExecutePrompt: (id: string, prompt: string) => propsRef.current.onExecutePrompt(id, prompt),
+    onApprovePlan: (id: string) => propsRef.current.onApprovePlan(id),
+    onSpawnWorker: (id: string) => propsRef.current.onSpawnWorker(id),
+    onStopPrompt: (id: string) => propsRef.current.onStopPrompt(id),
+    onOpenSettings: () => propsRef.current.onOpenSettings(),
+  }), []);
   const [grid, setGrid] = useState(() => loadAppearance().grid !== "none");
   useEffect(() => {
     const update = (event: Event) =>
@@ -115,7 +161,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   const fit = useCallback((items = cardsRef.current) => {
     const size = dimensions();
     setCamera(fitCamera(items, size.width, size.height));
-  }, []);
+  }, [setCamera]);
   const focus = useCallback(
     (id: string) => {
       const card = cardsRef.current.find((item) => item.id === id);
@@ -133,7 +179,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
         (size.height - 80) / 2,
       ),
     );
-  }, []);
+  }, [setCamera]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -153,6 +199,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     observer.observe(element);
     const wheel = (event: WheelEvent) => {
       const target = event.target as HTMLElement;
+      if (gesture.current) return;
       if (target.closest(".cw-card") && !event.ctrlKey && !event.metaKey)
         return;
       if (
@@ -161,14 +208,15 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
         return;
       event.preventDefault();
       const rect = element.getBoundingClientRect();
-      setCamera((current) =>
-        zoomCamera(
+      const current = cameraRef.current;
+      const next = zoomCamera(
           current,
           current.scale * Math.exp(-event.deltaY * 0.0015),
           event.clientX - rect.left,
           event.clientY - rect.top,
-        ),
       );
+      cameraRef.current = next;
+      framesRef.current?.camera.push(next);
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => {
@@ -220,6 +268,8 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   }, [fit, zoom, onSelectCard]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Finish queued zooming before computing gesture coordinates.
+    framesRef.current?.camera.flush();
     const target = event.target as HTMLElement;
     if (
       target.closest(
@@ -229,8 +279,9 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
       return;
     if (event.button !== 0 && event.button !== 1) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const worldX = (event.clientX - rect.left - camera.x) / camera.scale;
-    const worldY = (event.clientY - rect.top - camera.y) / camera.scale;
+    const currentCamera = cameraRef.current;
+    const worldX = (event.clientX - rect.left - currentCamera.x) / currentCamera.scale;
+    const worldY = (event.clientY - rect.top - currentCamera.y) / currentCamera.scale;
     const cardElement = target.closest("[data-card-id]");
     const card = cards.find(
       (item) => item.id === cardElement?.getAttribute("data-card-id"),
@@ -266,8 +317,8 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
         kind: "pan",
         startX: event.clientX,
         startY: event.clientY,
-        x: camera.x,
-        y: camera.y,
+        x: currentCamera.x,
+        y: currentCamera.y,
       };
       if (!card) onSelectCard(null);
     } else return;
@@ -278,44 +329,49 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const action = gesture.current;
     if (!action) return;
-    if (action.kind === "pan")
-      setCamera((current) => ({
-        ...current,
+    const currentCamera = cameraRef.current;
+    if (action.kind === "pan") {
+      const next = {
+        ...currentCamera,
         x: action.x + event.clientX - action.startX,
         y: action.y + event.clientY - action.startY,
-      }));
-    else if (action.kind === "resize")
-      onUpdateCard(action.id!, {
+      };
+      cameraRef.current = next;
+      framesRef.current?.camera.push(next);
+    } else if (action.kind === "resize")
+      framesRef.current?.card.push({ id: action.id!, update: {
         width: Math.max(
           360,
           Math.round(
-            action.width! + (event.clientX - action.startX) / camera.scale,
+            action.width! + (event.clientX - action.startX) / currentCamera.scale,
           ),
         ),
         height: Math.max(
           300,
           Math.round(
-            action.height! + (event.clientY - action.startY) / camera.scale,
+            action.height! + (event.clientY - action.startY) / currentCamera.scale,
           ),
         ),
-      });
+      }});
     else {
       const rect = event.currentTarget.getBoundingClientRect();
-      onUpdateCard(action.id!, {
+      framesRef.current?.card.push({ id: action.id!, update: {
         x: Math.round(
           action.x +
-            (event.clientX - rect.left - camera.x) / camera.scale -
+            (event.clientX - rect.left - currentCamera.x) / currentCamera.scale -
             action.startX,
         ),
         y: Math.round(
           action.y +
-            (event.clientY - rect.top - camera.y) / camera.scale -
+            (event.clientY - rect.top - currentCamera.y) / currentCamera.scale -
             action.startY,
         ),
-      });
+      }});
     }
   };
   const endGesture = () => {
+    framesRef.current?.camera.flush();
+    framesRef.current?.card.flush();
     gesture.current = null;
     setMoving(false);
   };
@@ -495,64 +551,14 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
           })}
         </svg>
         {cards.map((card) => (
-          <div
+          <CanvasCardNode
             key={card.id}
-            className={`cw-card-position ${selectedCardId === card.id ? "is-selected" : ""}`}
-            data-card-id={card.id}
-            style={{
-              left: card.x,
-              top: card.y,
-              zIndex: selectedCardId === card.id ? 5 : 1,
-            }}
-          >
-            {card.type === "agent" && (
-              <AgentCard
-                card={card}
-                isSelected={selectedCardId === card.id}
-                onSelect={() => onSelectCard(card.id)}
-                onUpdate={(updated) => onUpdateCard(card.id, updated)}
-                onDelete={() => onDeleteCard(card.id)}
-                onExecutePrompt={props.onExecutePrompt}
-                onApprovePlan={props.onApprovePlan}
-                onSpawnWorker={props.onSpawnWorker}
-                onStopPrompt={props.onStopPrompt}
-                onOpenSettings={props.onOpenSettings}
-                isSimulated={props.isSimulated}
-              />
-            )}
-            {card.type === "note" && (
-              <NoteCard
-                card={card}
-                isSelected={selectedCardId === card.id}
-                onSelect={() => onSelectCard(card.id)}
-                onUpdate={(updated) => onUpdateCard(card.id, updated)}
-                onDelete={() => onDeleteCard(card.id)}
-              />
-            )}
-            {card.type === "browser" && (
-              <BrowserPreviewCard
-                card={card}
-                isSelected={selectedCardId === card.id}
-                onSelect={() => onSelectCard(card.id)}
-                onUpdate={(updated) => onUpdateCard(card.id, updated)}
-                onDelete={() => onDeleteCard(card.id)}
-              />
-            )}
-            {card.type === "terminal" && (
-              <TerminalCard
-                card={card}
-                isSelected={selectedCardId === card.id}
-                onSelect={() => onSelectCard(card.id)}
-                onUpdate={(updated) => onUpdateCard(card.id, updated)}
-                onDelete={() => onDeleteCard(card.id)}
-              />
-            )}
-            <div
-              className="cw-resize"
-              title="Drag to resize card"
-              data-testid={`resize-${card.id}`}
-            />
-          </div>
+            card={card}
+            isSelected={selectedCardId === card.id}
+            actions={cardActions}
+            isSimulated={props.isSimulated}
+            providerConfigRevision={props.providerConfigRevision}
+          />
         ))}
       </div>
       {!cards.length && (
@@ -656,6 +662,45 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     </div>
   );
 }
+type CardActions = Pick<InfiniteCanvasProps,
+  "onSelectCard" | "onUpdateCard" | "onDeleteCard" | "onExecutePrompt" |
+  "onApprovePlan" | "onSpawnWorker" | "onStopPrompt" | "onOpenSettings">;
+
+// Camera transforms move the world without rerendering every conversation or embedded preview.
+const CanvasCardNode = memo(function CanvasCardNode({ card, isSelected, actions, isSimulated, providerConfigRevision }: {
+  card: CanvasCard;
+  isSelected: boolean;
+  actions: CardActions;
+  isSimulated: boolean;
+  providerConfigRevision: number;
+}) {
+  const onSelect = useCallback(() => actions.onSelectCard(card.id), [actions, card.id]);
+  const onUpdate = useCallback((update: Partial<CanvasCard>) => actions.onUpdateCard(card.id, update), [actions, card.id]);
+  const onDelete = useCallback(() => actions.onDeleteCard(card.id), [actions, card.id]);
+  const common = { card, isSelected, onSelect, onUpdate, onDelete };
+  return (
+    <div
+      className={`cw-card-position ${isSelected ? "is-selected" : ""}`}
+      data-card-id={card.id}
+      style={{ left: card.x, top: card.y, zIndex: isSelected ? 5 : 1 }}
+    >
+      {card.type === "agent" && <AgentCard {...common}
+        onExecutePrompt={actions.onExecutePrompt}
+        onApprovePlan={actions.onApprovePlan}
+        onSpawnWorker={actions.onSpawnWorker}
+        onStopPrompt={actions.onStopPrompt}
+        onOpenSettings={actions.onOpenSettings}
+        isSimulated={isSimulated}
+        providerConfigRevision={providerConfigRevision}
+      />}
+      {card.type === "note" && <NoteCard {...common} />}
+      {card.type === "browser" && <BrowserPreviewCard {...common} />}
+      {card.type === "terminal" && <TerminalCard {...common} />}
+      <div className="cw-resize" title="Drag to resize card" data-testid={`resize-${card.id}`} />
+    </div>
+  );
+});
+
 function LayersIcon() {
   return (
     <span className="cw-empty-icon">

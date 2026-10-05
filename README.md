@@ -13,6 +13,8 @@ A polished infinite canvas for live AI conversations, project notes, browser pre
 - An infinite canvas with drag, resize, pan, zoom, minimap, card arrangement, and shared project memory.
 - Notes, embedded previews, saved command snippets, workspace import and export, and browser-local persistence.
 - Midnight, Graphite, and Daylight themes, custom accents, grid styles, and motion preferences that respect reduced-motion settings.
+- Click feedback, animated scene tabs and menus, and a cleaner landing page with less repeated navigation.
+- Canvas gestures batched once per animation frame, memoized conversations, buffered workspace saves, and streaming scroll that lets you read earlier messages.
 
 ## Start locally
 

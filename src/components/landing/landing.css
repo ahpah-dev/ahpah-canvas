@@ -5,7 +5,8 @@
   overflow:clip;
   font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   -webkit-font-smoothing:antialiased;
-  --lp-ease:cubic-bezier(.22,1,.36,1)
+  --lp-ease:cubic-bezier(.22,1,.36,1);
+  --lp-motion-duration:260ms
 }
 
 .lp-page button,.lp-site-nav button {
@@ -61,6 +62,8 @@
 }
 
 .lp-site-nav {
+  --lp-ease:cubic-bezier(.22,1,.36,1);
+  --lp-motion-duration:260ms;
   max-width:1180px;
   margin:auto;
   height:64px;
@@ -71,7 +74,7 @@
   border:1px solid #ffffff12;
   border-radius:17px;
   background:#0e0f17d9;
-  backdrop-filter:blur(24px);
+  backdrop-filter:blur(12px);
   box-shadow:0 8px 30px #00000020,inset 0 1px #ffffff04
 }
 
@@ -338,12 +341,28 @@
 }
 
 .lp-scene-tabs {
-  display:flex;
-  gap:3px;
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  isolation:isolate;
   background:#11111c;
   border:1px solid #ffffff0d;
   padding:4px;
   border-radius:9px
+}
+
+.lp-scene-tabs::before {
+  content:'';
+  position:absolute;
+  z-index:-1;
+  inset:4px auto 4px 4px;
+  width:calc((100% - 8px)/3);
+  border-radius:6px;
+  background:#30243f;
+  box-shadow:inset 0 1px #ffffff0f;
+  transform:translateX(calc(var(--lp-scene,0)*100%));
+  transition:transform var(--lp-motion-duration) var(--lp-ease);
+  pointer-events:none
 }
 
 .lp-scene-tabs button {
@@ -356,8 +375,7 @@
 
 .lp-scene-tabs button[aria-selected=true] {
   color:#e5dafa;
-  background:#30243f;
-  box-shadow:inset 0 1px #ffffff0f
+  background:transparent
 }
 
 .lp-scene-tabs button:hover {
@@ -2664,13 +2682,18 @@
   50% { transform:translateY(-10px) rotate(-3deg) }
 }
 
+html[data-canvas-motion="none"] .lp-page *,
+html[data-canvas-motion="none"] .lp-page *::before,
+html[data-canvas-motion="none"] .lp-site-nav *,
 html[data-canvas-motion="off"] .lp-page *,
+html[data-canvas-motion="off"] .lp-page *::before,
 html[data-canvas-motion="off"] .lp-site-nav * {
   animation:none!important;
   transition:none!important;
   scroll-behavior:auto!important
 }
 
+html[data-canvas-motion="none"] .lp-reveal,
 html[data-canvas-motion="off"] .lp-reveal {
   opacity:1;
   transform:none
@@ -2679,6 +2702,19 @@ html[data-canvas-motion="off"] .lp-reveal {
 html[data-canvas-motion="subtle"] .lp-orbit-point,
 html[data-canvas-motion="subtle"] .lp-demo-cursor {
   animation:none
+}
+
+html[data-canvas-motion="subtle"] .lp-page,
+html[data-canvas-motion="subtle"] .lp-site-nav {
+  --lp-motion-duration:140ms
+}
+
+html[data-canvas-motion="subtle"] .lp-page *,
+html[data-canvas-motion="subtle"] .lp-page *::before,
+html[data-canvas-motion="subtle"] .lp-site-nav * {
+  animation-duration:140ms;
+  animation-delay:0ms;
+  transition-duration:140ms
 }
 
 @media(max-width:850px) {
@@ -2717,8 +2753,98 @@ html[data-canvas-motion="subtle"] .lp-demo-cursor {
     transform:none;
     transition:none
   }
-  .lp-page *,.lp-site-nav * {
+  .lp-page *,.lp-page *::before,.lp-site-nav * {
     scroll-behavior:auto;
-    transition-duration:.01ms!important
+    animation:none!important;
+    transition:none!important
+  }
+}
+
+/* Clear feedback, with decorative motion reserved for the element being explored. */
+.lp-nav-settings {
+  display:grid;
+  place-items:center;
+  width:34px;
+  height:34px;
+  border:1px solid #ffffff0d;
+  border-radius:9px;
+  transition:background var(--lp-motion-duration),color var(--lp-motion-duration)
+}
+
+.lp-nav-settings:hover {
+  background:#ffffff07
+}
+
+.lp-nav-settings svg {
+  transition:transform var(--lp-motion-duration) var(--lp-ease)
+}
+
+.lp-nav-settings:hover svg {
+  transform:rotate(30deg)
+}
+
+.lp-announcement,.lp-nav-launch,.lp-text-link,.lp-preview-open,
+.lp-preview-theme,.lp-app-command button,.lp-footer button,.lp-footer a {
+  transition:color var(--lp-motion-duration),background var(--lp-motion-duration),transform var(--lp-motion-duration) var(--lp-ease)
+}
+
+.lp-page button:not(:disabled):active,.lp-page a:active,.lp-site-nav button:active {
+  transform:translateY(1px)
+}
+
+.lp-text-link:hover svg,.lp-preview-open:hover svg,.lp-nav-launch:hover svg {
+  transform:translate(2px,-2px)
+}
+
+.lp-text-link svg,.lp-preview-open svg,.lp-nav-launch svg {
+  transition:transform var(--lp-motion-duration) var(--lp-ease)
+}
+
+.lp-preview-theme-icon {
+  display:grid;
+  place-items:center;
+  animation:lp-scene-in var(--lp-motion-duration) ease both
+}
+
+.lp-orbit-point,.lp-demo-cursor,.lp-wires .lp-wire-flow,
+.lp-waveform i,.lp-mic-orbit::before {
+  animation:none
+}
+
+.lp-showcase-halo {
+  filter:none
+}
+
+.lp-app-frame {
+  transition:border-color var(--lp-motion-duration)
+}
+
+.lp-provider-strip {
+  justify-content:center;
+  gap:clamp(25px,5vw,70px)
+}
+
+.lp-footer a {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#a99bb9;
+  font-size:10px;
+  text-decoration:none
+}
+
+.lp-footer a:hover {
+  color:#eee5ff
+}
+
+@media (hover:hover) and (prefers-reduced-motion:no-preference) {
+  html:not([data-canvas-motion="none"]):not([data-canvas-motion="off"]):not([data-canvas-motion="subtle"]) .lp-showcase:hover .lp-wire-flow {
+    animation:lp-route 3s linear 2
+  }
+  html:not([data-canvas-motion="none"]):not([data-canvas-motion="off"]):not([data-canvas-motion="subtle"]) .lp-feature-voice:hover .lp-waveform i {
+    animation:lp-wave 1.4s ease-in-out var(--bar-delay) 2 alternate
+  }
+  html:not([data-canvas-motion="none"]):not([data-canvas-motion="off"]):not([data-canvas-motion="subtle"]) .lp-feature-voice:hover .lp-mic-orbit::before {
+    animation:lp-orbit-pulse 1.8s ease-out 1
   }
 }

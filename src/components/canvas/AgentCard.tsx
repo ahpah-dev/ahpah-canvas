@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   Radio,
   Sparkles,
@@ -21,6 +21,8 @@ import {
 import type { CanvasCard, TerminalLine } from "../../types/canvas";
 import { loadGatewayConfig, supportsLocalBridge } from "../../utils/gateways";
 import { cardName, isBusy, statusName } from "../../utils/cardPresentation";
+import { hasSameCardContent } from "../../utils/cardRendering";
+import { isNearScrollBottom } from "../../utils/interactionScheduling";
 
 interface AgentCardProps {
   card: CanvasCard;
@@ -34,6 +36,7 @@ interface AgentCardProps {
   onStopPrompt: (cardId: string) => void;
   onOpenSettings: () => void;
   isSimulated: boolean;
+  providerConfigRevision: number;
 }
 
 function CodeBlock({ text, language }: { text: string; language: string }) {
@@ -66,7 +69,7 @@ function InlineText({ text }: { text: string }) {
     piece.startsWith("**") ? <strong key={index}>{piece.slice(2, -2)}</strong>
       : piece.startsWith("`") ? <code key={index}>{piece.slice(1, -1)}</code> : piece);
 }
-function ResponseContent({ text }: { text: string }) {
+const ResponseContent = memo(function ResponseContent({ text }: { text: string }) {
   return (
     <div className="cw-response-text">
       {text.split(/```/).map((part, index) =>
@@ -99,9 +102,9 @@ function ResponseContent({ text }: { text: string }) {
       )}
     </div>
   );
-}
+});
 
-export function AgentCard({
+function AgentCardBody({
   card,
   isSelected,
   onSelect,
@@ -113,6 +116,7 @@ export function AgentCard({
   onStopPrompt,
   onOpenSettings,
   isSimulated,
+  providerConfigRevision,
 }: AgentCardProps) {
   const [prompt, setPrompt] = useState("");
   const [copied, setCopied] = useState(false);
@@ -120,6 +124,7 @@ export function AgentCard({
   const [showQuick, setShowQuick] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const followingOutput = useRef(true);
   const oldSize = useRef<{ width: number; height: number } | null>(null);
   const busy = isBusy(card);
   const requestId = card.history.findLast((line) => line.type === "input")?.id;
@@ -135,7 +140,9 @@ export function AgentCard({
     return () => window.clearInterval(timer);
   }, [busy, requestId]);
   const kilo = card.agentType === "kilo";
-  const config = loadGatewayConfig();
+  // The external provider snapshot is invalidated by App's configuration event revision.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  const config = useMemo(() => loadGatewayConfig(), [providerConfigRevision]);
   const custom = card.agentType === "custom" ? config.customProviders?.find((provider) => provider.id === card.providerId) : undefined;
   const name = custom?.name || cardName(card);
   const providerName = custom?.name || (card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
@@ -149,10 +156,20 @@ export function AgentCard({
       (line.type === "input" && !line.id.startsWith("init-")) ||
       line.type === "error",
   );
+  const lastRequestId = useRef(requestId);
   useEffect(() => {
     const element = historyRef.current;
-    if (element) element.scrollTop = hasConversation ? element.scrollHeight : 0;
-  }, [card.history, card.status, hasConversation]);
+    if (!element) return;
+    if (lastRequestId.current !== requestId) {
+      lastRequestId.current = requestId;
+      followingOutput.current = true;
+    }
+    if (!followingOutput.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (followingOutput.current) element.scrollTop = hasConversation ? element.scrollHeight : 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [card.history, busy, hasConversation, requestId]);
   const send = (value = prompt) => {
     if (!value.trim() || busy) return;
     onExecutePrompt(card.id, value.trim());
@@ -270,6 +287,7 @@ export function AgentCard({
       <div
         className="cw-conversation"
         ref={historyRef}
+        onScroll={(event) => { followingOutput.current = isNearScrollBottom(event.currentTarget); }}
         role="log"
         aria-label={`${name} conversation`}
         aria-live="polite"
@@ -475,3 +493,8 @@ export function AgentCard({
     </section>
   );
 }
+
+export const AgentCard = memo(AgentCardBody, (previous, next) =>
+  hasSameCardContent(previous.card, next.card) &&
+  (Object.keys(next) as (keyof AgentCardProps)[]).every((key) =>
+    key === "card" || Object.is(previous[key], next[key])));

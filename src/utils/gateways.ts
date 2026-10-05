@@ -33,8 +33,10 @@ const KILO_BASE = "/api/gateway/kilo";
 const KILO_UPSTREAM = "https://api.kilo.ai/api/gateway";
 
 export function supportsLocalBridge(): boolean {
-  return import.meta.env?.VITE_GATEWAY_TRANSPORT !== "direct" &&
-    (typeof window === "undefined" || !window.location || ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname));
+  if (import.meta.env?.VITE_GATEWAY_TRANSPORT === "direct") return false;
+  if (import.meta.env?.DEV || import.meta.env?.VITE_GATEWAY_TRANSPORT === "bridge") return true;
+  return typeof window === "undefined" || !window.location ||
+    ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 }
 
 export function gatewayTransport(config?: GatewayConfig): "bridge" | "direct" {

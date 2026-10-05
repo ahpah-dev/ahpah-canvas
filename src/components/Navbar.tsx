@@ -3,7 +3,6 @@ import {
   ArrowUpRight,
   Database,
   FolderKanban,
-  Radio,
   Settings,
 } from "lucide-react";
 
@@ -35,8 +34,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             onSwitchView("site");
             window.scrollTo({
               top: 0,
-              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-                .matches
+              behavior:
+                document.documentElement.dataset.canvasMotion === "none" ||
+                window.matchMedia("(prefers-reduced-motion: reduce)").matches
                 ? "instant"
                 : "smooth",
             });
@@ -52,18 +52,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           AhPah <span>Canvas</span>
         </button>
         <nav className="lp-nav-links" aria-label="Main navigation">
-          <a href="#workspace">The canvas</a>
-          <a href="#workflow">How it feels</a>
+          <a href="#workspace">Workspace</a>
+          <a href="#workflow">Features</a>
           <a href="#providers">Providers</a>
-          <button
-            onClick={onOpenWorkspaces}
-            className="text-xs text-[#9c9cac] hover:text-white"
-          >
-            Workspaces
-          </button>
         </nav>
         <div className="lp-nav-actions">
-          <button onClick={onOpenSettings}>Settings</button>
+          <button
+            className="lp-nav-settings"
+            onClick={onOpenSettings}
+            aria-label="Settings"
+            title="Workspace settings"
+          >
+            <Settings size={16} />
+          </button>
           <button
             className="lp-nav-launch"
             onClick={() => onSwitchView("canvas")}
@@ -106,16 +107,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <FolderKanban size={14} />
           <span>Workspaces</span>
         </button>
-        <button
-          onClick={onOpenSettings}
-          className="cw-nav-provider"
-          aria-label="Providers"
-        >
-          <Radio size={13} />
-          <span>Providers</span>
-        </button>
         <button onClick={onOpenSettings} aria-label="Settings">
           <Settings size={15} />
+          <span>Settings</span>
         </button>
       </nav>
     </header>

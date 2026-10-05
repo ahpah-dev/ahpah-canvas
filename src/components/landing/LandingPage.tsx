@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowRight, ArrowUpRight, AudioLines, Check, ChevronDown,
   Command, Database, FileCode2, Folder, FolderKanban, GitBranch,
-  Layers3, Maximize2, Mic, Minus, Moon, MoreHorizontal, MousePointer2, Palette, Plus,
+  Layers3, Maximize2, Mic, Minus, Moon, MoreHorizontal, MousePointer2, Plus,
   Plug, Radio, Search, ShieldCheck, Sparkles, Sun, Terminal,
 } from 'lucide-react';
 import './landing.css';
@@ -40,10 +40,10 @@ function CanvasShowcase({ onLaunch }: { onLaunch: () => void }) {
       <div className="lp-showcase-halo" aria-hidden="true" />
       <div className="lp-showcase-topline">
         <span><span className="lp-dot" /> YOUR IDEAS, IN MOTION</span>
-        <div className="lp-scene-tabs" role="tablist" aria-label="Canvas preview examples">
+        <div className="lp-scene-tabs" role="tablist" aria-label="Canvas preview examples" style={{ '--lp-scene': sceneIndex } as React.CSSProperties}>
           {scenes.map((item, index) => <button key={item.name} id={`lp-scene-${index}`} ref={(node) => { sceneTabs.current[index] = node; }} role="tab" aria-selected={sceneIndex === index} aria-controls="lp-scene-panel" tabIndex={sceneIndex === index ? 0 : -1} onKeyDown={(event) => navigateScenes(event, index)} onClick={() => setSceneIndex(index)}>{item.name}</button>)}
         </div>
-        <button className="lp-preview-theme" aria-pressed={lightPreview} aria-label="Light preview" onClick={() => setLightPreview((value) => !value)}>{lightPreview ? <Sun size={13} /> : <Moon size={13} />}<span>{lightPreview ? 'Daylight' : 'Midnight'}</span></button>
+        <button className="lp-preview-theme" aria-pressed={lightPreview} aria-label="Light preview" onClick={() => setLightPreview((value) => !value)}><span className="lp-preview-theme-icon" key={String(lightPreview)}>{lightPreview ? <Sun size={13} /> : <Moon size={13} />}</span><span>{lightPreview ? 'Daylight' : 'Midnight'}</span></button>
       </div>
       <div className="lp-app-frame">
         <div className="lp-app-topbar">
@@ -97,7 +97,7 @@ function CanvasShowcase({ onLaunch }: { onLaunch: () => void }) {
         </div>
         <div className="lp-app-command"><span className="lp-command-icon"><Command size={14} /></span><span>One place for your next “what if…”</span><button onClick={onLaunch}>Start creating <ArrowRight size={13} /></button></div>
       </div>
-      <div className="lp-showcase-caption"><span><MousePointer2 size={12} /> A different scene. A different perspective.</span><span>Sample workspace · connect a provider to start creating</span></div>
+      <div className="lp-showcase-caption"><span>Choose a scene to explore the canvas.</span><span>Sample workspace · connect a provider to start creating</span></div>
     </div>
   );
 }
@@ -124,7 +124,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCanvas, onOpen
         <section className="lp-hero">
           <div className="lp-hero-grid" aria-hidden="true" /><div className="lp-hero-light" aria-hidden="true" /><div className="lp-hero-orbits" aria-hidden="true"><i /><i /><i /><span className="lp-orbit-point"><Layers3 size={17} /></span><span className="lp-orbit-point cyan"><Sparkles size={15} /></span></div>
           <div className="lp-hero-copy">
-            <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Sparkles size={12} /> BUILT FOR YOUR NEXT IDEA</span><i /><span>Bring your favorite API <ArrowRight size={12} /></span></button>
+            <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Sparkles size={12} /> YOUR PROVIDERS. ONE CANVAS.</span><ArrowRight size={12} /></button>
             <h1 className="lp-enter lp-enter-1">Big ideas deserve<br /><span>an infinite canvas.</span></h1>
             <p className="lp-enter lp-enter-2">A little less switching. A lot more creating.<br /> Bring your AI agents, ideas, and context into one beautiful workspace.</p>
             <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCanvas}>Open your canvas <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace">Explore the workspace <ArrowDown size={15} /></a></div>
@@ -133,13 +133,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCanvas, onOpen
           <div className="lp-container lp-enter lp-enter-4"><CanvasShowcase onLaunch={onLaunchCanvas} /></div>
         </section>
 
-        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Workspace capabilities"><span>ONE WORKSPACE.<br /><strong>ALL THE RIGHT TOOLS.</strong></span><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo Auto Free</div><div><Plug size={20} /> Custom APIs</div><div><Database size={20} /> Memory</div><div><FolderKanban size={20} /> Workspaces</div></section>
-
-        <section className="lp-detail-band lp-container lp-reveal" aria-label="Designed around your workflow">
-          <div><span className="lp-detail-icon"><Radio size={16} /></span><span><strong>Always current.</strong><small>Models loaded from your provider.</small></span></div>
-          <div><span className="lp-detail-icon"><Plug size={16} /></span><span><strong>Make the connection.</strong><small>Your own compatible API endpoints.</small></span></div>
-          <div><span className="lp-detail-icon"><Palette size={16} /></span><span><strong>Feel right at home.</strong><small>Your colors. Your surface. Your motion.</small></span></div>
-        </section>
+        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>BUILT AROUND<br /><strong>YOUR TOOLS.</strong></span><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo Auto Free</div><div><Plug size={20} /> Custom APIs</div></section>
 
         <section className="lp-features lp-container" id="workflow">
           <div className="lp-section-heading lp-reveal"><span className="lp-eyebrow"><span /> A BETTER WAY TO BUILD</span><h2>Stay in your flow.<br /><span>See the bigger picture.</span></h2><p>Your best work happens when everything clicks.<br /> Give every agent a place, and every idea room to grow.</p></div>
@@ -153,11 +147,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCanvas, onOpen
 
         <section className="lp-connections lp-container lp-reveal" id="providers"><div className="lp-connection-copy"><span className="lp-eyebrow"><span /> CONNECT YOUR INTELLIGENCE</span><h2>Your providers.<br /><span>Your possibilities.</span></h2><p>Connect OmniRoute, use Kilo Auto Free, or bring your own OpenAI-compatible API. Choose from your provider’s current models and keep every conversation in one place.</p><button className="lp-button lp-button-secondary" onClick={onOpenOneClickSetup}>Set up your providers <ArrowRight size={15} /></button><div className="lp-connection-note"><ShieldCheck size={13} /><span>Workspace exports keep API keys private.</span></div></div><div className="lp-connection-art"><div className="lp-provider-node"><span className="lp-provider-symbol"><Radio size={24} /></span><div><strong>OmniRoute</strong><small>Your gateway. Your model catalog.</small></div><ArrowDown size={14} /></div><div className="lp-connection-line"><i /><span>OPENAI-COMPATIBLE CONNECTIONS</span><i /></div><div className="lp-hub"><span className="lp-brand-mark"><i /><i /><i /><i /></span><strong>One canvas. More possibility.</strong><span>AhPah Canvas</span></div><div className="lp-connection-line"><i /><span>DYNAMIC FREE MODEL ROUTING</span><i /></div><div className="lp-provider-node kilo"><span className="lp-provider-symbol"><Sparkles size={24} /></span><div><strong>Kilo Auto Free</strong><small>Current models, selected by Kilo.</small></div><ArrowUpRight size={14} /></div><div className="lp-custom-provider"><Plug size={13} /><span>And your own compatible API.</span><span>YOUR CHOICE</span></div></div></section>
 
-        <section className="lp-start-section lp-container lp-reveal"><div className="lp-start-header"><span className="lp-eyebrow"><span /> FROM IDEA TO WORKSPACE</span><h2>Make your first move.</h2></div><div className="lp-steps"><button onClick={onOpenOneClickSetup}><span>01</span><Radio size={18} /><h3>Connect your provider</h3><p>Choose OmniRoute, Kilo, or your own compatible API.</p><ArrowUpRight size={17} /></button><button onClick={onOpenWorkspaces}><span>02</span><Layers3 size={18} /><h3>Find your arrangement</h3><p>Start with a layout, then make the canvas feel like your own.</p><ArrowUpRight size={17} /></button><button onClick={onLaunchCanvas}><span>03</span><Sparkles size={18} /><h3>Give your idea a place</h3><p>Open a card, send a prompt, and follow where the work takes you.</p><ArrowUpRight size={17} /></button></div></section>
-
         <section className="lp-final-cta lp-reveal"><div className="lp-cta-grid" aria-hidden="true" /><div className="lp-cta-orb" aria-hidden="true"><i /><i /><i /></div><div className="lp-container"><span className="lp-eyebrow">LESS FRICTION. MORE POSSIBILITY.</span><h2>Your next big thing<br /><span>starts with a little space.</span></h2><button className="lp-button lp-button-primary" onClick={onLaunchCanvas}>Find your flow <ArrowUpRight size={17} /></button><p>A canvas for the way you create.</p></div></section>
       </div>
-      <footer className="lp-footer lp-container"><div><span className="lp-brand-mark"><i /><i /><i /><i /></span><strong>AhPah Canvas</strong><span>A place for what’s next.</span></div><nav aria-label="Footer navigation"><button onClick={onLaunchCanvas}>Canvas</button><button onClick={onOpenWorkspaces}>Workspaces</button><button onClick={onOpenMemory}>Memory</button><button onClick={onOpenOneClickSetup}>Providers <ArrowUpRight size={12} /></button></nav></footer>
+      <footer className="lp-footer lp-container"><div><span className="lp-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><strong>AhPah Canvas</strong><span>Open source · MIT licensed</span></div><nav aria-label="Footer navigation"><button onClick={onLaunchCanvas}>Canvas</button><button onClick={onOpenOneClickSetup}>Providers</button><a href="https://github.com/ahpah-dev/ahpah-canvas" target="_blank" rel="noopener noreferrer"><FileCode2 size={13} /> Source <ArrowUpRight size={12} /></a></nav></footer>
     </div>
   );
 };
