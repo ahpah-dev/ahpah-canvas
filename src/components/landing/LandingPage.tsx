@@ -105,7 +105,7 @@ function CodeLine({ text }: { text: string }) {
   );
 }
 
-function EngineeringShowcase({ onLaunch }: { onLaunch: () => void }) {
+function EngineeringShowcase({ onLaunch, workspaceDrop, onWorkspaceDropEnd }: { onLaunch: () => void; workspaceDrop: boolean; onWorkspaceDropEnd: () => void }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [lightPreview, setLightPreview] = useState(false);
   const sceneTabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -121,7 +121,7 @@ function EngineeringShowcase({ onLaunch }: { onLaunch: () => void }) {
     sceneTabs.current[next]?.focus();
   };
   return (
-    <div className={`lp-showcase lp-engineering-showcase${lightPreview ? " lp-preview-light" : ""}`} id="workspace">
+    <div className={`lp-showcase lp-engineering-showcase${lightPreview ? " lp-preview-light" : ""}${workspaceDrop ? " lp-workspace-drop" : ""}`} id="workspace" onAnimationEnd={event => { if (event.animationName === "lp-workspace-slide-down") onWorkspaceDropEnd(); }}>
       <div className="lp-showcase-halo" aria-hidden="true" />
       <div className="lp-showcase-topline">
         <span><span className="lp-dot" /> THE WORK, RIGHT IN FRONT OF YOU</span>
@@ -171,6 +171,7 @@ function EngineeringShowcase({ onLaunch }: { onLaunch: () => void }) {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunchCanvas, onOpenOneClickSetup }) => {
   const pageRef = useRef<HTMLDivElement>(null);
+  const [workspaceDrop, setWorkspaceDrop] = useState(false);
   useEffect(() => {
     const nodes = pageRef.current?.querySelectorAll(".lp-reveal");
     if (!nodes) return;
@@ -184,6 +185,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
   }, []);
+  const showWorkspace = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const workspace = pageRef.current?.querySelector<HTMLElement>("#workspace");
+    if (!workspace) return;
+    const motionOff = document.documentElement.dataset.canvasMotion === "none" ||
+      document.documentElement.dataset.canvasMotion === "off" ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (motionOff) setWorkspaceDrop(false);
+    else { setWorkspaceDrop(false); requestAnimationFrame(() => setWorkspaceDrop(true)); }
+    workspace.scrollIntoView({ behavior: motionOff ? "instant" : "smooth", block: "start" });
+  };
 
   return (
     <div className="lp-page" ref={pageRef}>
@@ -194,10 +206,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
             <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Sparkles size={12} /> YOUR MODELS. YOUR CODE. YOUR CALL.</span><ArrowRight size={12} /></button>
             <h1 className="lp-enter lp-enter-1">From idea to<br /><span>working software.</span></h1>
             <p className="lp-enter lp-enter-2">Give your agents a project to work on.<br /> Read the code, review the changes, and see what you’re building.</p>
-            <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Start coding <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace">Explore the workspace <ArrowDown size={15} /></a></div>
+            <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Start coding <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>Explore the workspace <ArrowDown size={15} /></a></div>
             <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> Real project files</span><span><Check size={12} /> Reviewable edits</span><span><Check size={12} /> Your own providers</span></div>
           </div>
-          <div className="lp-container lp-enter lp-enter-4"><EngineeringShowcase onLaunch={onLaunchCode} /></div>
+          <div className="lp-container lp-enter lp-enter-4"><EngineeringShowcase onLaunch={onLaunchCode} workspaceDrop={workspaceDrop} onWorkspaceDropEnd={() => setWorkspaceDrop(false)} /></div>
         </section>
 
         <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>BUILT AROUND<br /><strong>YOUR MODELS.</strong></span><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo Auto Free</div><div><Plug size={20} /> Custom APIs</div></section>
@@ -221,3 +233,4 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
     </div>
   );
 };
+

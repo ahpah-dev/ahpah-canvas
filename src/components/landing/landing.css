@@ -2866,6 +2866,20 @@ html[data-canvas-motion="subtle"] .lp-site-nav * {
   box-shadow:inset 0 1px #ffffff08
 }
 .cw-nav-views button:focus-visible { outline:2px solid var(--cw-accent,#b19aed);outline-offset:3px }
+.lp-engineering-showcase.lp-workspace-drop {
+  animation: lp-workspace-slide-down var(--cw-motion-duration, 420ms) cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes lp-workspace-slide-down {
+  from { opacity: 0; transform: translateY(-42px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-engineering-showcase.lp-workspace-drop { animation: none; }
+}
+html[data-canvas-motion="none"] .lp-engineering-showcase.lp-workspace-drop,
+html[data-canvas-motion="off"] .lp-engineering-showcase.lp-workspace-drop {
+  animation: none;
+}
 .lp-engineering-showcase .lp-app-frame {
   --lp-panel:#11111b;--lp-editor:#0d0f18;--lp-panel-line:#ffffff0a;
   --lp-editor-text:#c2bfd4;--lp-panel-muted:#787288;--lp-panel-title:#b4a5cc;
