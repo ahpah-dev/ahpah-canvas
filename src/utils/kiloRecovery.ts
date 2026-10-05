@@ -7,13 +7,15 @@ export const markKiloRouteUnhealthy = (id: string) => unhealthyUntil.set(id, Dat
 export const isKiloRouteHealthy = (id: string) => (unhealthyUntil.get(id) || 0) <= Date.now();
 
 // Automatic fallback requires explicit price evidence, not a "free" name.
+export function hasVerifiedFreePricing(model: GatewayModel) {
+  const pricing = model.pricing;
+  const zero = (price: unknown) => (typeof price === "number" || (typeof price === "string" && !!price.trim())) && Number(price) === 0;
+  return !!pricing && zero(pricing.prompt) && zero(pricing.completion) && model.isFree !== false
+    && !Object.entries(pricing).some(([key, price]) => key !== "discount" && !zero(price));
+}
 export function verifiedFreeFallbacks(models: GatewayModel[], excluded: Set<string> = new Set(), now = new Date()) {
   return sortModelCatalog(models, now).filter((model) => {
-    const pricing = model.pricing;
-    const zero = (price: unknown) =>
-      (typeof price === "number" || (typeof price === "string" && !!price.trim())) && Number(price) === 0;
-    if (!pricing || !zero(pricing.prompt) || !zero(pricing.completion)) return false;
-    if (model.isFree === false || Object.entries(pricing).some(([key, price]) => key !== "discount" && !zero(price))) return false;
+    if (!hasVerifiedFreePricing(model)) return false;
     return !isAutomaticModel(model) && !excluded.has(model.id) && isKiloRouteHealthy(model.id);
   });
 }

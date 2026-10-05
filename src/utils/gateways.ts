@@ -2,7 +2,7 @@ import { sortModelCatalog } from "./modelCatalog.ts";
 import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS } from "./gatewayPolicy.ts";
 import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
-import { fastReasoning, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
+import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
 import { normalizeCustomProviders, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
 export type { CustomProvider, GatewayTransport } from "./providerConfig.ts";
 
@@ -279,15 +279,17 @@ export async function sendGatewayPrompt(
     : AUTO_FREE_FIRST_ANSWER_MS;
   let tokens = 0;
   let target: GatewayModel = { id: model };
+  let catalogModels: GatewayModel[] = [];
   let fallbackModels: GatewayModel[] | undefined;
   const excluded = new Set([model, ...(options.routing?.excludedModels || [])]);
   const nextFreeModel = async () => {
     if (!fallbackModels) {
       try {
-        fallbackModels = verifiedFreeFallbacks(await listKiloModels(
+        catalogModels = await listKiloModels(
           AbortSignal.any([signal, AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
           config,
-        ));
+        );
+        fallbackModels = verifiedFreeFallbacks(catalogModels);
       } catch {
         signal.throwIfAborted();
         fallbackModels = [];
@@ -295,6 +297,11 @@ export async function sendGatewayPrompt(
     }
     return fallbackModels.find((item) => !excluded.has(item.id) && isKiloRouteHealthy(item.id));
   };
+  if (isKilo && !automatic && options.validateResponse) {
+    await nextFreeModel();
+    const selected = catalogModels.find(item => item.id === model && hasVerifiedFreePricing(item));
+    if (selected) target = selected;
+  }
   if (automatic && options.routing?.model && !excluded.has(options.routing.model)) {
     await nextFreeModel();
     const preferred = fallbackModels?.find(item => item.id === options.routing!.model && !excluded.has(item.id) && isKiloRouteHealthy(item.id));
@@ -332,7 +339,7 @@ export async function sendGatewayPrompt(
       detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : `Waiting for ${custom?.name || (isKilo ? "Kilo" : "OmniRoute")}`,
     });
     try {
-      const reasoning = automatic ? fastReasoning(target) : undefined;
+      const reasoning = automatic || (isKilo && options.validateResponse && hasVerifiedFreePricing(target)) ? fastReasoning(target) : undefined;
       const result = await jsonRequest(`${base}/chat/completions`, {
         ...request,
         signal: attemptSignal,
@@ -419,6 +426,7 @@ export async function sendGatewayPrompt(
         throw new EmptyCompletionError(
           `${resolvedModel} reached the ${maxTokens.toLocaleString("en-US")} token limit before producing an answer. Try a shorter prompt or choose a model with less reasoning.`,
           resolvedModel,
+          'token_limit',
         );
       if (message?.reasoning || message?.reasoning_content)
         throw new EmptyCompletionError(
@@ -438,6 +446,21 @@ export async function sendGatewayPrompt(
       const recoverable = error instanceof UnusableCodingResponseError || error instanceof NoAnswerError || error instanceof EmptyCompletionError ||
         (error instanceof GatewayServiceError && [404, 408, 410, 500, 502, 503, 504].includes(error.status || 0));
       if (!automatic || (hasAnswer && !(error instanceof UnusableCodingResponseError)) || !recoverable) throw error;
+      if (error instanceof EmptyCompletionError && error.reason === 'token_limit' && target.id === model && attempt < 2) {
+        await nextFreeModel();
+        const instant = fallbackModels?.find(item => item.id === error.model && !excluded.has(item.id)
+          && fastReasoning(item)?.enabled === false && isKiloRouteHealthy(item.id));
+        if (instant) {
+          // The virtual router had only generic low reasoning. Retry its effective free model
+          // with the explicitly advertised disabled-thinking variant before abandoning it.
+          excluded.add(target.id);
+          markKiloRouteUnhealthy(target.id);
+          if (options.routing) options.routing.excludedModels = [...new Set([...options.routing.excludedModels, target.id])];
+          options.onProgress?.({ text: '', phase: 'retrying', detail: `${instant.name || instant.id} exhausted its reasoning budget. Retrying its advertised instant mode` });
+          target = instant;
+          continue;
+        }
+      }
       excluded.add(target.id);
       excluded.add(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
       if (error instanceof UnusableCodingResponseError) excluded.add(error.model);

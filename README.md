@@ -120,6 +120,8 @@ Auto Free waits up to 30 seconds for the first answer and can try up to three ro
 
 **Verify Auto Free** and automatic setup check structured coding actions instead of accepting a plain “READY” reply. Coding runs keep the effective model when the live catalog confirms it is free. Malformed complete coding replies and repeated actions can switch to another verified free route while keeping the goal, real tool results, and current source. Recovery is bounded; if no route makes progress, the run stops early and retains staged files. Identical rewrites preserve source review, and repeated exports of the same source reuse the confirmed delivery result.
 
+Directly selected free Kilo coding models use their catalog-advertised instant or low-reasoning variant when available. If Auto Free's effective model exhausts the token budget without producing an answer and offers a verified free instant mode, recovery can retry that exact model with thinking disabled before trying another route. The same conversation and token ceiling are preserved; partial answers, paid selections, and cancellation are not silently replaced.
+
 ### Custom API providers
 
 Add a named provider profile with your API base URL, optional API key, and model. A compatible provider exposes `POST /chat/completions` and, for catalog discovery, `GET /models` below that base URL. If the provider does not expose a model catalog, enter its exact model ID manually. Enable streaming only when the provider supports OpenAI style server-sent events.

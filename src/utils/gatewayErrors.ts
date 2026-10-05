@@ -9,10 +9,12 @@ export class GatewayServiceError extends Error {
 
 export class EmptyCompletionError extends Error {
   model: string;
-  constructor(message: string, model: string) {
+  reason?: 'token_limit';
+  constructor(message: string, model: string, reason?: 'token_limit') {
     super(message);
     this.name = "EmptyCompletionError";
     this.model = model;
+    this.reason = reason;
   }
 }
 

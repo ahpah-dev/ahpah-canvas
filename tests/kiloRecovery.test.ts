@@ -229,7 +229,8 @@ test('malformed complete coding replies switch free routes with identical conver
 
 test('manual Kilo coding routes are not silently replaced when they repeat', async (t) => {
   let calls = 0;
-  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [] });
     assert.equal(JSON.parse(init.body as string).model, 'chosen-model'); calls++;
     return json({ model: 'chosen-model', choices: [{ message: { content: JSON.stringify({ actions: [{ tool: 'list_files' }] }) } }] });
   });
@@ -237,4 +238,62 @@ test('manual Kilo coding routes are not silently replaced when they repeat', asy
   assert.equal(calls, 3);
   assert.match(result.error!, /repeated actions/);
   assert.equal(result.activities.some(activity => activity.title === 'Recovering a repeating Kilo route'), false);
+});
+
+const ling = { ...free('inclusionai/ling-3.1-flash', 20), supported_parameters: ['reasoning'], opencode: { variants: { instant: { reasoning: { enabled: false, effort: 'none' } } } } };
+const codingReady = JSON.stringify({ actions: [{ tool: 'finish', summary: 'Ready', review: 'No files changed.' }] });
+
+test('Auto Free retries reasoning exhaustion on Ling using its advertised instant mode', async (t) => {
+  const requests: any[] = [];
+  const progress: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [ling, free('alternative/free')] });
+    const payload = JSON.parse(init.body as string); requests.push(payload);
+    if (payload.model === 'kilo-auto/free') return new Response(`data: ${JSON.stringify({ model: ling.id, choices: [{ delta: { reasoning: 'Private reasoning' }, finish_reason: 'length' }], usage: { total_tokens: 8192 } })}\n\ndata: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } });
+    return json({ model: ling.id, choices: [{ message: { content: codingReady } }], usage: { total_tokens: 100 } });
+  });
+  const result = await sendGatewayPrompt('kilo', 'Continue my coding goal', config, { messages: [{ role: 'system', content: 'Return coding actions.' }], validateResponse: parseAgentActions, onProgress: value => { if (value.detail) progress.push(value.detail); } });
+  assert.deepEqual(requests.map(item => item.model), ['kilo-auto/free', ling.id]);
+  assert.deepEqual(requests.map(item => item.reasoning), [{ effort: 'low' }, { enabled: false, effort: 'none' }]);
+  assert.deepEqual(requests[0].messages, requests[1].messages);
+  assert.equal(result.tokens, 8292);
+  assert.equal(result.text, codingReady);
+  assert.ok(progress.some(detail => detail.includes('advertised instant mode')));
+});
+
+test('a directly selected free Ling coding model uses instant mode without switching models', async (t) => {
+  const requests: any[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [ling] });
+    requests.push(JSON.parse(init.body as string));
+    return json({ model: ling.id, choices: [{ message: { content: codingReady } }] });
+  });
+  await sendGatewayPrompt('kilo', 'Next step', { ...config, kiloModel: ling.id }, { validateResponse: parseAgentActions });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].model, ling.id);
+  assert.deepEqual(requests[0].reasoning, { enabled: false, effort: 'none' });
+});
+
+test('an ineffective instant retry falls back once without repeating the exhausted Ling route', async (t) => {
+  const models: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [ling, free('alternative/free')] });
+    const payload = JSON.parse(init.body as string); models.push(payload.model);
+    return payload.model === 'alternative/free' ? json({ model: payload.model, choices: [{ message: { content: codingReady } }] })
+      : json({ model: ling.id, choices: [{ message: { content: null, reasoning: 'Thinking' }, finish_reason: 'length' }] });
+  });
+  const result = await sendGatewayPrompt('kilo', 'Next step', config, { validateResponse: parseAgentActions });
+  assert.deepEqual(models, ['kilo-auto/free', ling.id, 'alternative/free']);
+  assert.equal(result.model, 'alternative/free');
+});
+
+test('paid model metadata cannot enable the automatic instant retry', async (t) => {
+  const models: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [{ ...ling, pricing: { prompt: '1', completion: '1' }, isFree: false }, free('alternative/free')] });
+    const payload = JSON.parse(init.body as string); models.push(payload.model);
+    return payload.model === 'kilo-auto/free' ? json({ model: ling.id, choices: [{ message: { content: null }, finish_reason: 'length' }] }) : json({ model: payload.model, choices: [{ message: { content: codingReady } }] });
+  });
+  await sendGatewayPrompt('kilo', 'Next step', config, { validateResponse: parseAgentActions });
+  assert.deepEqual(models, ['kilo-auto/free', 'alternative/free']);
 });
