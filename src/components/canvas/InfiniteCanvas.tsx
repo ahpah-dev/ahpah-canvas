@@ -14,6 +14,7 @@ import {
   FileText,
   Globe,
   Terminal,
+  Code2,
   LayoutGrid,
   Grid2X2,
   Minus,
@@ -467,6 +468,15 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
               </span>
               <div>
                 Kilo Auto Free<small>Dynamic free model routing</small>
+              </div>
+              <Plus size={13} />
+            </button>
+            <button onClick={() => add("agent", "codex")}>
+              <span className="cw-icon-tile">
+                <Code2 size={17} />
+              </span>
+              <div>
+                Codex agent<small>Use your ChatGPT subscription</small>
               </div>
               <Plus size={13} />
             </button>

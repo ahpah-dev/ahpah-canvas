@@ -1,6 +1,6 @@
 # AhPah Canvas
 
-An open source agentic coding workspace with real project files, an editor, visible agent actions, reviewed changes, and previews. Connect OmniRoute, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
+An open source agentic coding workspace with real project files, an editor, visible agent actions, reviewed changes, and previews. Connect **Codex with your ChatGPT subscription**, OmniRoute, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
 
 [Open the live site](https://ahpah-dev.github.io/ahpah-canvas/) · [Source on GitHub](https://github.com/ahpah-dev/ahpah-canvas) · [MIT license](LICENSE)
 
@@ -13,6 +13,7 @@ An open source agentic coding workspace with real project files, an editor, visi
 - An isolated browser preview for supported HTML/CSS/JavaScript projects, with missing-resource diagnostics and captured runtime errors.
 - Explicitly approved Node and npm commands in the local app, real output, generated-file review, and compiled previews after a supported build.
 - Live provider catalogs, searchable model selection, and free or paid labels. Model IDs come from the connected provider rather than a bundled mock list.
+- Codex in Code and Canvas through your ChatGPT subscription, with one-click local connection, live model selection, and native workspace tool calls.
 - Named custom API profiles with a base URL, optional API key, selected model, and streaming preference.
 - Canvas coding agents with real list/read/search/write/patch tools, visible action results, persistent source projects, cancellation, and automatic PC delivery after source review.
 - Kilo Auto Free recovery that checks the live catalog and uses verified free routes when a route stalls or returns an empty answer.
@@ -52,7 +53,7 @@ Start OmniRoute or another local model server separately.
 
 Open **Settings → Connections & auto setup → Connect with ChatGPT** in the local app. It detects an installed Codex CLI (including the Windows Codex app), or installs the official `@openai/codex` package in the ignored `.ahpah-tools` folder. An existing ChatGPT sign-in is reused; otherwise complete OpenAI's sign-in in the tab it opens. The connection is detected automatically after sign-in. No API key or credential file is copied into the browser.
 
-The model picker loads Codex's current catalog and selects its reported default. Choose a model, then **Use Codex in Canvas** to add/focus a coding card and leave demo mode. Codex is also available in the Code provider picker. Your ChatGPT plan's eligibility, model access, and shared usage limits apply. Catalog visibility is not proof of model entitlement.
+The model picker loads Codex's current catalog and selects its reported default. Choose a model, then **Use Codex in Canvas** to add/focus a coding card and leave demo mode. You can also create a Codex card from **Canvas → Add card → Codex agent**. Codex is also available in the Code provider picker. Your ChatGPT plan's eligibility, model access, and shared usage limits apply. Catalog visibility is not proof of model entitlement.
 
 The local bridge uses official Codex app-server authentication and native dynamic tool calls for coding. Each run keeps one ephemeral Codex thread: workspace tool requests go to AhPah's validated project runtime, and actual results return to that same thread. Codex's final prose is not parsed as an action envelope. This uses the app-server's experimental dynamic-tools interface and requires a current compatible Codex CLI. Free-text explanation requests use `codex exec` and include the current prompt with conversation context.
 
@@ -88,7 +89,7 @@ The app reports a PC save only after the writer closes successfully. General sou
 
 ### Tool calling
 
-The app uses a validated JSON action protocol compatible with the connected text providers. Available coding tools include `plan`, `list_files`, `read_file` (with line ranges), `search_files`, `write_file`, `replace_in_file`, and `finish`. Canvas also supports `save_files` to prepare delivery and `export_html` for requested HTML exports. Source writes happen after successful source review; queued delivery is reported distinctly from a confirmed PC save. Canvas prevents automatic PC deletion. `run_command` queues an exact command for review in Code and never approves or executes it by itself.
+Codex uses native workspace tool calls; other connected text providers use a validated JSON action protocol. Available coding tools include `plan`, `list_files`, `read_file` (with line ranges), `search_files`, `write_file`, `replace_in_file`, and `finish`. Canvas also supports `save_files` to prepare delivery and `export_html` for requested HTML exports. Source writes happen after successful source review; queued delivery is reported distinctly from a confirmed PC save. Canvas prevents automatic PC deletion. `run_command` queues an exact command for review in Code and never approves or executes it by itself.
 
 Runs allow up to **20 steps**, **8 actions per response**, and **10 minutes**. Unknown tools, invalid paths, ambiguous replacements, incomplete model JSON, cancellation, and folder failures produce real errors. Model reliability and provider availability still determine whether a run can complete; the app does not claim runtime verification without actual command output.
 

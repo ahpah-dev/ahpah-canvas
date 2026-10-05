@@ -30,7 +30,7 @@ import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
 import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
-import { sendCodexPrompt } from "./utils/codexConnection";
+import { codexModel, sendCodexPrompt } from "./utils/codexConnection";
 import { conversationHtml, htmlExportRequest, htmlTitle, projectHtmlArtifact, refusesHtmlSave } from './utils/htmlExport';
 import type { HtmlArtifact } from './utils/htmlExport';
 import { autoSaveHtmlToFolder, autoSaveFilesToFolder } from './utils/connectedFolder';
@@ -359,12 +359,16 @@ export function App() {
         title:
           custom ? custom.name : aType === "kilo"
             ? "Kilo Auto Free"
+            : aType === "codex"
+              ? "Codex"
             : ["omniroute", "deepseek", "qwen"].includes(aType)
               ? "OmniRoute Agent"
               : `${def.name} · ${def.defaultRole}`,
         role:
           custom ? "OpenAI-compatible API" : aType === "kilo"
             ? "Dynamic free model routing"
+            : aType === "codex"
+              ? "ChatGPT subscription"
             : ["omniroute", "deepseek", "qwen"].includes(aType)
               ? "OpenAI-compatible gateway"
               : def.defaultRole,
@@ -379,6 +383,8 @@ export function App() {
             text:
               custom ? `› ${custom.name} · ${custom.model || "model not selected"}` : aType === "kilo"
                 ? `› Kilo AI Gateway · ${loadGatewayConfig().kiloModel}`
+                : aType === "codex"
+                  ? `› Codex · ${codexModel() || "Connect in Settings"}`
                 : ["omniroute", "deepseek", "qwen"].includes(aType)
                   ? `› OmniRoute · ${loadGatewayConfig().omniRouteModel || "model not selected"}`
                   : `$ ${def.command}`,
@@ -391,7 +397,7 @@ export function App() {
           },
           {
             id: `init-${Date.now()}-2`,
-            text: `● ${custom?.name || (aType === "kilo" ? "Kilo Gateway" : aType === "omniroute" || aType === "deepseek" || aType === "qwen" ? "OmniRoute" : def.name)} agent ready. Configure its model in Settings.`,
+            text: `● ${custom?.name || (aType === "kilo" ? "Kilo Gateway" : aType === "codex" ? "Codex" : aType === "omniroute" || aType === "deepseek" || aType === "qwen" ? "OmniRoute" : def.name)} agent ready. Configure its model in Settings.`,
             type: "system",
             timestamp: new Date().toLocaleTimeString([], {
               hour12: false,
