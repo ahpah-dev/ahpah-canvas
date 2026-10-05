@@ -1,0 +1,845 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Activity,
+  Check,
+  CircleAlert,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LoaderCircle,
+  Radio,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  X,
+  Zap,
+  Palette,
+  Square,
+  ChevronDown,
+} from "lucide-react";
+import {
+  listKiloModels,
+  listOmniRouteModels,
+  type GatewayModel,
+  loadGatewayConfig,
+  saveGatewayConfig,
+  gatewayTransport,
+  supportsLocalBridge,
+  type CustomProvider,
+  type GatewayTransport,
+} from "../../utils/gateways";
+import { CustomProvidersPanel } from "./CustomProvidersPanel";
+import { useDialogFocus } from "../../utils/useDialogFocus";
+import { useDialogPresence } from "../../utils/useDialogPresence";
+import {
+  autoConfigureGateways,
+  type SetupProgress,
+} from "../../utils/autoConfiguration";
+import { AppearancePanel } from "./AppearancePanel";
+import { ModelSelector } from "./ModelSelector";
+import {
+  currentModelRecommendations,
+  isFreeModel,
+} from "../../utils/modelCatalog";
+
+interface SettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isSimulated: boolean;
+  onToggleSimulated: (val: boolean) => void;
+  onAutoConfigured: (providers: ("omniroute" | "kilo")[]) => void;
+  onAddCustomProvider: (providerId: string) => void;
+}
+
+type ConnectionState = "idle" | "checking" | "connected" | "verified" | "error";
+
+const Field = ({
+  label,
+  value,
+  onChange,
+  placeholder,
+  secret = false,
+  visible,
+  toggle,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  secret?: boolean;
+  visible?: boolean;
+  toggle?: () => void;
+}) => (
+  <label className="block space-y-1.5">
+    <span className="text-xs font-medium text-slate-300">{label}</span>
+    <span className="relative block">
+      <input
+        type={secret && !visible ? "password" : "text"}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-[#0b0a12] px-3.5 py-2.5 pr-10 text-sm text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/10"
+      />
+      {secret && toggle && (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={visible ? "Hide API key" : "Show API key"}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"
+        >
+          {visible ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      )}
+    </span>
+  </label>
+);
+
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  isSimulated,
+  onToggleSimulated,
+  onAutoConfigured,
+  onAddCustomProvider,
+}) => {
+  useDialogFocus(isOpen, onClose);
+  const present = useDialogPresence(isOpen);
+  const [tab, setTab] = useState<"connections" | "appearance">("connections");
+  const [omniRouteUrl, setOmniRouteUrl] = useState(
+    () => loadGatewayConfig().omniRouteUrl,
+  );
+  const [omniRouteKey, setOmniRouteKey] = useState(
+    () => loadGatewayConfig().omniRouteKey,
+  );
+  const [omniRouteModel, setOmniRouteModel] = useState(
+    () => loadGatewayConfig().omniRouteModel,
+  );
+  const [kiloKey, setKiloKey] = useState(() => loadGatewayConfig().kiloKey);
+  const [customProviders, setCustomProviders] = useState<CustomProvider[]>(() => loadGatewayConfig().customProviders || []);
+  const [transport, setTransport] = useState<GatewayTransport>(() => loadGatewayConfig().transport || "auto");
+  const [kiloModel, setKiloModel] = useState(
+    () => loadGatewayConfig().kiloModel,
+  );
+  const [omniModels, setOmniModels] = useState<GatewayModel[]>([]);
+  const [kiloModels, setKiloModels] = useState<GatewayModel[]>([]);
+  const [omniState, setOmniState] = useState<ConnectionState>("idle");
+  const [kiloState, setKiloState] = useState<ConnectionState>("idle");
+  const [omniError, setOmniError] = useState("");
+  const [kiloError, setKiloError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [showOmniKey, setShowOmniKey] = useState(false);
+  const [showKiloKey, setShowKiloKey] = useState(false);
+  const [autoOnOpen, setAutoOnOpen] = useState(
+    () => supportsLocalBridge() && localStorage.getItem("ahpah_auto_setup_on_open") !== "false",
+  );
+  const [running, setRunning] = useState(false);
+  const [setup, setSetup] = useState<
+    Partial<Record<"omniroute" | "kilo", SetupProgress>>
+  >({});
+  const [diagnostics, setDiagnostics] = useState<SetupProgress[]>([]);
+  const [setupMessage, setSetupMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const checkingCatalog = omniState === "checking" || kiloState === "checking";
+  const setupController = useRef<AbortController | null>(null);
+  const automaticallyStarted = useRef(false);
+  const runAuto = useCallback(async () => {
+    if (setupController.current || checkingCatalog) return;
+    const controller = new AbortController();
+    setupController.current = controller;
+    setRunning(true);
+    setSetup({});
+    setDiagnostics([]);
+    setSetupMessage("");
+    setSaveError("");
+    try {
+      const result = await autoConfigureGateways(
+        { ...loadGatewayConfig(), transport, omniRouteUrl, omniRouteKey, omniRouteModel, kiloKey, kiloModel },
+        AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
+        (progress) => {
+          setSetup((previous) => ({
+            ...previous,
+            [progress.provider]: progress,
+          }));
+          setDiagnostics((previous) => [...previous, progress].slice(-30));
+        },
+      );
+      if (controller.signal.aborted) return;
+      const ready = result.providers
+        .filter((provider) => provider.verified)
+        .map((provider) => provider.provider);
+      setOmniModels(result.providers[0].models);
+      setKiloModels(result.providers[1].models);
+      setOmniState(result.providers[0].verified ? "verified" : "error");
+      setKiloState(result.providers[1].verified ? "verified" : "error");
+      setOmniError(
+        result.providers[0].verified ? "" : result.providers[0].detail,
+      );
+      setKiloError(
+        result.providers[1].verified ? "" : result.providers[1].detail,
+      );
+      if (ready.length) {
+        const verifiedConfig = result.providers.reduce(
+          (next, provider) => ({ ...next, ...provider.config }),
+          { ...loadGatewayConfig(), transport },
+        );
+        try {
+          saveGatewayConfig(verifiedConfig);
+        } catch {
+          setSaveError(
+            "The browser could not save the verified configuration. Check browser storage and retry.",
+          );
+          setSetupMessage(
+            "Routes responded, but their settings could not be saved.",
+          );
+          return;
+        }
+        if (result.providers[0].verified) {
+          setOmniRouteUrl(verifiedConfig.omniRouteUrl);
+          setOmniRouteModel(verifiedConfig.omniRouteModel);
+        }
+        if (result.providers[1].verified)
+          setKiloModel(verifiedConfig.kiloModel);
+        onToggleSimulated(false);
+        onAutoConfigured(ready);
+        setSetupMessage(
+          ready.length === 2
+            ? "Both gateways are verified and saved. Your workspace is ready."
+            : "Your working gateway is saved. Review the other connection below.",
+        );
+      } else
+        setSetupMessage(
+          "No verified route found. Your saved settings were kept. Review the diagnostics or add your provider credentials.",
+        );
+    } catch (error) {
+      setSetupMessage(
+        controller.signal.aborted
+          ? "Setup stopped. Your saved settings were kept."
+          : error instanceof Error && error.name === "TimeoutError"
+            ? "Setup timed out. Your saved settings were kept; you can retry."
+            : "Setup could not finish. Your saved settings were kept.",
+      );
+    } finally {
+      if (setupController.current === controller) {
+        setupController.current = null;
+        setRunning(false);
+      }
+    }
+  }, [
+    omniRouteUrl,
+    omniRouteKey,
+    omniRouteModel,
+    kiloKey,
+    kiloModel,
+    onAutoConfigured,
+    onToggleSimulated,
+    checkingCatalog,
+    transport,
+  ]);
+  useEffect(() => {
+    if (!isOpen || !autoOnOpen || automaticallyStarted.current) return;
+    const timer = window.setTimeout(() => {
+      automaticallyStarted.current = true;
+      void runAuto();
+    }, 260);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, autoOnOpen, runAuto]);
+  useEffect(() => () => setupController.current?.abort(), []);
+
+  if (!present) return null;
+
+  const config = {
+    ...loadGatewayConfig(),
+    omniRouteUrl,
+    omniRouteKey,
+    omniRouteModel,
+    kiloKey,
+    kiloModel,
+    customProviders,
+    transport,
+  };
+  const selectedKiloModel = kiloModels.find((model) => model.id === kiloModel);
+  const kiloRequiresKey = selectedKiloModel
+    ? !isFreeModel(selectedKiloModel)
+    : kiloModel !== "kilo-auto/free";
+  const save = (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      saveGatewayConfig(config);
+      setSaved(true);
+      setSaveError("");
+    } catch (error) {
+      setSaved(false);
+      setSaveError(
+        error instanceof Error ? error.message : "The browser could not save these settings. Check browser storage and retry.",
+      );
+    }
+  };
+
+  const checkOmniRoute = async () => {
+    setOmniState("checking");
+    setOmniError("");
+    try {
+      const models = await listOmniRouteModels(config);
+      if (!models.length)
+        throw new Error("Gateway responded, but no models were returned.");
+      setOmniModels(models);
+      if (
+        !omniRouteModel ||
+        !models.some((model) => model.id === omniRouteModel)
+      )
+        setOmniRouteModel(
+          currentModelRecommendations(models)[0]?.id || models[0].id,
+        );
+      setOmniState("connected");
+    } catch (error) {
+      setOmniState("error");
+      setOmniError(
+        error instanceof Error ? error.message : "Connection failed.",
+      );
+    }
+  };
+
+  const checkKilo = async () => {
+    setKiloState("checking");
+    setKiloError("");
+    try {
+      const models = await listKiloModels(undefined, config);
+      if (!models.length)
+        throw new Error("Kilo responded, but no models were returned.");
+      setKiloModels(models);
+      if (!models.some((model) => model.id === "kilo-auto/free"))
+        throw new Error(
+          "The current Kilo catalog did not include kilo-auto/free.",
+        );
+      setKiloState("connected");
+    } catch (error) {
+      setKiloState("error");
+      setKiloError(
+        error instanceof Error ? error.message : "Connection failed.",
+      );
+    }
+  };
+
+  const status = (state: ConnectionState) =>
+    state === "verified" ? (
+      <span className="cw-verified-status">
+        <Check size={12} /> Verified response
+      </span>
+    ) : state === "connected" ? (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-cyan-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+        Catalog loaded
+      </span>
+    ) : state === "checking" ? (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+        Checking
+      </span>
+    ) : state === "error" ? (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-rose-300">
+        <CircleAlert className="h-3.5 w-3.5" />
+        Needs attention
+      </span>
+    ) : (
+      <span className="text-[11px] text-slate-500">Not checked</span>
+    );
+
+  return (
+    <div
+      data-state={isOpen ? "open" : "closed"}
+      className="cw-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#03050a]/80 p-4 backdrop-blur-lg"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-hidden={!isOpen}
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        className="cw-modal flex max-h-[min(90vh,820px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#13101c] shadow-[0_32px_120px_rgba(0,0,0,.7)]"
+      >
+        <header className="flex items-center justify-between border-b border-white/[.07] px-6 py-5 sm:px-8">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-violet-300/15 bg-violet-300/[.08] text-violet-200">
+              <Settings size={19} />
+            </div>
+            <div>
+              <h2
+                id="settings-title"
+                className="text-base font-semibold tracking-tight text-white"
+              >
+                Workspace settings
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Your connections. Your colors. Your way of working.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close settings"
+            className="rounded-xl p-2 text-slate-500 transition hover:bg-white/[.06] hover:text-white"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div
+          className="cw-settings-tabs"
+          role="tablist"
+          aria-label="Settings sections"
+          onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+              return;
+            event.preventDefault();
+            const next =
+              event.key === "Home"
+                ? "connections"
+                : event.key === "End"
+                  ? "appearance"
+                  : tab === "connections"
+                    ? "appearance"
+                    : "connections";
+            setTab(next);
+            event.currentTarget
+              .querySelector<HTMLButtonElement>(`#${next}-tab`)
+              ?.focus();
+          }}
+        >
+          <button
+            id="connections-tab"
+            type="button"
+            role="tab"
+            aria-selected={tab === "connections"}
+            tabIndex={tab === "connections" ? 0 : -1}
+            aria-controls="connections-panel"
+            onClick={() => setTab("connections")}
+          >
+            <Radio size={14} /> Connections & auto setup
+          </button>
+          <button
+            id="appearance-tab"
+            type="button"
+            role="tab"
+            aria-selected={tab === "appearance"}
+            tabIndex={tab === "appearance" ? 0 : -1}
+            aria-controls="appearance-panel"
+            onClick={() => setTab("appearance")}
+          >
+            <Palette size={14} /> Appearance
+          </button>
+        </div>
+        {tab === "connections" ? (
+          <form
+            id="connections-panel"
+            role="tabpanel"
+            aria-labelledby="connections-tab"
+            onSubmit={save}
+            onChange={() => setSaved(false)}
+            className="cw-settings-body space-y-5 overflow-y-auto p-5 sm:p-8"
+          >
+            <section className="cw-auto-setup">
+              <div className="cw-auto-heading">
+                <span className="cw-icon-tile">
+                  <Sparkles size={19} />
+                </span>
+                <div>
+                  <h3>Let the canvas do the setup.</h3>
+                  <p>
+                    Discover live models, find a working free route, and save
+                    it.
+                  </p>
+                </div>
+              </div>
+              <div className="cw-auto-actions">
+                <button
+                  type="button"
+                  className="cw-primary-button"
+                  disabled={!supportsLocalBridge() || running || checkingCatalog}
+                  onClick={() => void runAuto()}
+                >
+                  {running ? (
+                    <LoaderCircle size={14} className="animate-spin" />
+                  ) : (
+                    <Zap size={14} />
+                  )}{" "}
+                  {running
+                    ? "Configuring…"
+                    : diagnostics.length
+                      ? "Run setup again"
+                      : "Auto configure"}
+                </button>
+                {running && (
+                  <button
+                    type="button"
+                    className="cw-soft-button"
+                    onClick={() => setupController.current?.abort()}
+                  >
+                    <Square size={11} /> Stop setup
+                  </button>
+                )}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={autoOnOpen}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setAutoOnOpen(enabled);
+                      try {
+                        localStorage.setItem(
+                          "ahpah_auto_setup_on_open",
+                          String(enabled),
+                        );
+                      } catch {
+                        setSaveError("This preference could not be saved.");
+                      }
+                    }}
+                  />
+                  Auto setup on first settings open
+                </label>
+              </div>
+              {(running || diagnostics.length > 0) && (
+                <div className="cw-setup-progress" aria-live="polite">
+                  {(["omniroute", "kilo"] as const).map((provider) => {
+                    const progress = setup[provider];
+                    return (
+                      <div key={provider} className={progress?.phase || ""}>
+                        <span>
+                          {progress?.phase === "ready" ? (
+                            <Check size={14} />
+                          ) : progress?.phase === "attention" ? (
+                            <CircleAlert size={14} />
+                          ) : running ? (
+                            <LoaderCircle size={14} className="animate-spin" />
+                          ) : (
+                            <Radio size={14} />
+                          )}
+                        </span>
+                        <div>
+                          <strong>
+                            {provider === "kilo"
+                              ? "Kilo Auto Free"
+                              : "OmniRoute"}
+                            <small>
+                              {progress?.phase === "ready"
+                                ? "Verified"
+                                : progress?.phase === "attention"
+                                  ? "Needs attention"
+                                  : !running
+                                    ? "Stopped"
+                                    : progress?.phase === "testing"
+                                      ? `Route ${progress.attempt} of ${progress.total}`
+                                      : "Discovering"}
+                            </small>
+                          </strong>
+                          <p>
+                            {!running &&
+                            progress?.phase !== "ready" &&
+                            progress?.phase !== "attention"
+                              ? "No changes applied to this connection."
+                              : progress?.detail || "Waiting to begin…"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {setupMessage && (
+                <p className="cw-setup-message" role="status">
+                  {setupMessage}
+                </p>
+              )}
+              <p className="cw-auto-note">
+                Uses small checks on free text routes. Provider credentials and
+                running services may still need your attention.
+              </p>
+              {diagnostics.length > 0 && (
+                <details className="cw-setup-diagnostics">
+                  <summary>
+                    Setup diagnostics <ChevronDown size={12} />
+                  </summary>
+                  <ol>
+                    {diagnostics.map((entry, index) => (
+                      <li key={index}>
+                        <span>
+                          {entry.provider === "kilo" ? "Kilo" : "OmniRoute"}
+                        </span>
+                        {entry.detail}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+            </section>
+            {!supportsLocalBridge() && <div className="cw-hosted-connection-note"><strong>Choose a browser-compatible API</strong><p>This site has no gateway server. Custom HTTPS providers that allow browser access work here. Kilo and local HTTP providers need the local app.</p><a href="https://github.com/ahpah-dev/ahpah-canvas#start-locally" target="_blank" rel="noreferrer">Get the local app <ChevronDown size={12} /></a></div>}
+            <fieldset
+              disabled={running || checkingCatalog}
+              className="space-y-5"
+            >
+              <section className="cw-connection-mode">
+                <div><strong>Connection mode</strong><p>{gatewayTransport(config) === "direct" ? "API requests go directly from this browser to your provider. The provider must allow browser access (CORS)." : "The local server connects to your API, including providers without browser access."}</p></div>
+                <label><span className="sr-only">Connection mode</span><select aria-label="Connection mode" value={supportsLocalBridge() ? transport : "direct"} onChange={(event) => {
+                  setTransport(event.target.value as GatewayTransport);
+                  setOmniState("idle"); setKiloState("idle");
+                }}>
+                  {supportsLocalBridge() && <option value="auto">Automatic · local gateway</option>}
+                  {supportsLocalBridge() && <option value="bridge">Local gateway</option>}
+                  <option value="direct">Browser · direct API</option>
+                </select></label>
+              </section>
+              <section className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-300/[.055] to-transparent p-5 sm:p-6">
+                <div className="mb-5 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-300/10 text-violet-200">
+                      <Radio size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">
+                        OmniRoute
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Your local OpenAI compatible gateway
+                      </p>
+                    </div>
+                  </div>
+                  {status(omniState)}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Field
+                      label="Base URL"
+                      value={omniRouteUrl}
+                      onChange={(value) => {
+                        setOmniRouteUrl(value);
+                        setOmniState("idle");
+                        setOmniError("");
+                        setOmniModels([]);
+                      }}
+                      placeholder="http://localhost:20128/v1"
+                    />
+                  </div>
+                  <Field
+                    label="API key · optional"
+                    value={omniRouteKey}
+                    onChange={(value) => {
+                      setOmniRouteKey(value);
+                      setOmniState("idle");
+                      setOmniError("");
+                    }}
+                    placeholder="Gateway key, if enabled"
+                    secret
+                    visible={showOmniKey}
+                    toggle={() => setShowOmniKey(!showOmniKey)}
+                  />
+                  <ModelSelector
+                    provider="OmniRoute"
+                    models={omniModels}
+                    value={omniRouteModel}
+                    onChange={(value) => {
+                      setOmniRouteModel(value);
+                      setSaved(false);
+                      setOmniState("idle");
+                      setOmniError("");
+                    }}
+                  />
+                </div>
+                {omniError && (
+                  <p className="mt-3 text-xs leading-relaxed text-rose-300">
+                    {omniError}
+                  </p>
+                )}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[11px] text-slate-500">
+                    Model list is fetched live from{" "}
+                    <code className="text-slate-400">/v1/models</code>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={checkOmniRoute}
+                    disabled={omniState === "checking"}
+                    className="inline-flex items-center gap-2 rounded-xl border border-violet-200/15 bg-violet-200/[.07] px-3.5 py-2 text-xs font-medium text-violet-100 transition hover:bg-violet-200/[.12] disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      size={13}
+                      className={omniState === "checking" ? "animate-spin" : ""}
+                    />
+                    Test & load models
+                  </button>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-300/[.05] to-transparent p-5 sm:p-6">
+                <div className="mb-5 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200">
+                      <Zap size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">
+                        Kilo AI Gateway
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {kiloModel === "kilo-auto/free"
+                          ? "Auto Free routes to Kilo’s current free models"
+                          : "Direct model selection from Kilo’s live catalog"}
+                      </p>
+                    </div>
+                  </div>
+                  {status(kiloState)}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label={
+                      kiloRequiresKey
+                        ? "Kilo API key · required for this route"
+                        : "Kilo API key · optional for free routes"
+                    }
+                    value={kiloKey}
+                    onChange={(value) => {
+                      setKiloKey(value);
+                      setKiloState("idle");
+                      setKiloError("");
+                    }}
+                    placeholder={
+                      kiloRequiresKey
+                        ? "Enter your Kilo key for this model"
+                        : "Paste a key for account tracking"
+                    }
+                    secret
+                    visible={showKiloKey}
+                    toggle={() => setShowKiloKey(!showKiloKey)}
+                  />
+                  <ModelSelector
+                    provider="Kilo"
+                    models={kiloModels}
+                    value={kiloModel}
+                    onChange={(value) => {
+                      setKiloModel(value);
+                      setSaved(false);
+                      setKiloState("idle");
+                      setKiloError("");
+                    }}
+                  />
+                </div>
+                {kiloError && (
+                  <p className="mt-3 text-xs leading-relaxed text-rose-300">
+                    {kiloError}
+                  </p>
+                )}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[11px] text-slate-500">
+                    {kiloModel === "kilo-auto/free"
+                      ? "The model behind Auto Free updates automatically on Kilo’s side."
+                      : "Requests use this exact model ID, without Auto Free routing."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={checkKilo}
+                    disabled={kiloState === "checking"}
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/15 bg-cyan-200/[.07] px-3.5 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-200/[.12] disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      size={13}
+                      className={kiloState === "checking" ? "animate-spin" : ""}
+                    />
+                    Check Kilo catalog
+                  </button>
+                </div>
+                {!kiloKey && !kiloRequiresKey && (
+                  <p className="mt-3 flex items-center gap-1.5 text-[11px] text-cyan-200/80">
+                    <KeyRound size={12} />
+                    Kilo Auto Free works without a key. Add one if you want
+                    requests associated with your account.
+                  </p>
+                )}
+              </section>
+
+              <CustomProvidersPanel providers={customProviders} config={config} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
+                try {
+                  saveGatewayConfig(config);
+                  setSaveError("");
+                  onAddCustomProvider(provider.id);
+                } catch (error) {
+                  setSaveError(error instanceof Error ? error.message : "Could not save this provider.");
+                }
+              }} />
+              <section className="flex items-center justify-between gap-4 rounded-2xl border border-white/[.07] bg-white/[.025] p-4 sm:px-5">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-violet-200">
+                    <Sparkles size={17} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-100">
+                      Demo simulation
+                    </h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                      Use sample responses without contacting either gateway.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label="Demo simulation"
+                  aria-checked={isSimulated}
+                  onClick={() => onToggleSimulated(!isSimulated)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${isSimulated ? "bg-violet-500" : "bg-slate-700"}`}
+                >
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${isSimulated ? "left-6" : "left-1"}`}
+                  />
+                </button>
+              </section>
+            </fieldset>
+            {saveError && (
+              <p role="alert" className="cw-inline-error">
+                {saveError}
+              </p>
+            )}
+            <div className="flex flex-col-reverse justify-between gap-3 border-t border-white/[.07] pt-5 sm:flex-row sm:items-center">
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                <Activity size={13} />
+                Keys are stored in this browser only.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                {saved && (
+                  <span
+                    role="status"
+                    className="inline-flex items-center gap-1 text-xs text-cyan-300"
+                  >
+                    <Check size={14} />
+                    Saved
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl px-4 py-2.5 text-xs font-medium text-slate-400 transition hover:text-white"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={running}
+                  className="rounded-xl bg-violet-300 px-4 py-2.5 text-xs font-semibold text-slate-950 shadow-lg shadow-violet-300/10 transition hover:bg-violet-200"
+                >
+                  Save changes
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : (
+          <div
+            id="appearance-panel"
+            role="tabpanel"
+            aria-labelledby="appearance-tab"
+            className="cw-settings-appearance"
+          >
+            <AppearancePanel />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
