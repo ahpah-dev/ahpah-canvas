@@ -1095,6 +1095,10 @@ html[data-canvas-motion="none"] .cw-overlay[data-state="closed"] {
 .cw-codex-eyebrow { display:block; color:var(--cw-accent, #a78bfa); font-size:9px; letter-spacing:.14em; font-weight:700; margin-bottom:6px; }
 .cw-codex-status { display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border-radius:8px; color:#34d399; background:#10b98112; font-size:10px; text-transform:capitalize; }
 .cw-codex-connection .cw-auto-actions { margin-top:18px; }
+.cw-codex-connection .cw-secondary-button { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--cw-border); border-radius:10px; padding:10px 13px; color:var(--cw-muted); font-size:11px; transition:background var(--cw-motion-duration, 180ms), color var(--cw-motion-duration, 180ms); }
+.cw-codex-connection .cw-secondary-button:hover { background:var(--cw-panel-raised); color:var(--cw-text); }
+.cw-codex-connection .cw-secondary-button:focus-visible { outline:2px solid var(--cw-accent); outline-offset:3px; }
+.cw-codex-connection .cw-secondary-button:disabled { opacity:.5; cursor:wait; }
 .cw-codex-model { display:flex; flex-direction:column; gap:8px; margin-top:18px; font-size:12px; font-weight:600; }
 .cw-codex-model select { color:inherit; background:var(--cw-panel, #14121e); border:1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius:10px; padding:11px 12px; font:inherit; outline:none; }
 .cw-codex-model select:focus-visible { outline:2px solid var(--cw-accent, #a78bfa); outline-offset:2px; }
