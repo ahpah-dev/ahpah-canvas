@@ -198,7 +198,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  useEffect(() => { if (followActivity.current && activityList.current) activityList.current.scrollTop = activityList.current.scrollHeight; }, [activities]);
+  useEffect(() => { if (activities.length && followActivity.current && activityList.current) activityList.current.scrollTop = activityList.current.scrollHeight; }, [activities]);
 
   const addActivity = (kind: AgentActivity['kind'], title: string, detail: string) => setActivities(previous => [...previous, { id: crypto.randomUUID(), kind, title, detail, timestamp: new Date().toISOString() }].slice(-120));
 

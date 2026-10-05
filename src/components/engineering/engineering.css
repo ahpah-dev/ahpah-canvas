@@ -341,11 +341,12 @@
   .eng-workspace :is(input,textarea,select) { font-size:16px; }
   .eng-editor textarea,.eng-editor-gutter { line-height:24px; }
 }
-@media (max-height:700px) and (min-width:761px) {
+@media (max-height:800px) and (min-width:761px) {
   .eng-agent-heading { height:63px; padding-block:12px; }
   .eng-agent-body { padding-top:15px; }
   .eng-agent-welcome { padding-top:4px; }
-  .eng-agent-welcome .eng-orbit { width:55px; height:55px; margin-bottom:16px; border-radius:17px; }
+  .eng-agent-welcome .eng-orbit { display:none; }
+  .eng-agent-welcome h3 { font-size:22px; }
   .eng-composer { padding:11px 15px; }
   .eng-composer > textarea { min-height:74px; }
 }
