@@ -8,9 +8,11 @@ type PickerWindow = Window & { showDirectoryPicker?: (options: { id: string; mod
 export interface FolderState {
   supported: boolean; name: string; status: 'disconnected' | 'connecting' | 'permission' | 'connected' | 'saving';
   lastSaved: string; error: string;
+  pendingCount: number;
 }
 let folder: FolderHandle | null = null;
-let state: FolderState = { supported: typeof window !== 'undefined' && typeof (window as PickerWindow).showDirectoryPicker === 'function', name: '', status: 'disconnected', lastSaved: '', error: '' };
+let state: FolderState = { supported: typeof window !== 'undefined' && typeof (window as PickerWindow).showDirectoryPicker === 'function', name: '', status: 'disconnected', lastSaved: '', error: '', pendingCount: 0 };
+const pendingExports = new Map<string, { artifact: HtmlArtifact; onSaved?: (destination: string) => void }>();
 const listeners = new Set<() => void>();
 let initialized: Promise<void> | undefined;
 let generation = 0;
@@ -68,6 +70,7 @@ export async function connectFolder(change = false): Promise<void> {
     if (session !== generation) return;
     folder = selected; update({ name: selected.name, status: 'connected', lastSaved: '', error: '' });
     try { await storedFolder('write', selected); } catch { if (session === generation) update({ error: 'Folder connected for this session. Your browser could not remember it for next time.' }); }
+    if (session === generation) await flushPendingHtml();
   } catch (error) {
     if (session !== generation) return;
     update({ status: previous.status, error: error instanceof DOMException && error.name === 'AbortError' ? '' : error instanceof Error ? error.message : 'Could not connect the folder.' });
@@ -75,7 +78,7 @@ export async function connectFolder(change = false): Promise<void> {
 }
 
 export async function disconnectFolder(): Promise<void> {
-  ++generation; folder = null; update({ name: '', status: 'disconnected', lastSaved: '', error: '' });
+  ++generation; folder = null; pendingExports.clear(); update({ name: '', status: 'disconnected', lastSaved: '', error: '', pendingCount: 0 });
   try { await storedFolder('delete'); } catch { update({ error: 'Disconnected for this session. Browser storage could not forget the previous connection.' }); }
 }
 
@@ -94,6 +97,7 @@ export async function saveHtmlToFolder(artifact: HtmlArtifact): Promise<string> 
       if (await target.queryPermission({ mode: 'readwrite' }) !== 'granted') {
         update({ status: 'permission' }); throw new Error('Folder access expired. Reconnect the folder in the top bar, then retry the export.');
       }
+      if (session !== generation) throw new Error('The folder connection changed before the export. Retry in the current folder.');
       update({ status: 'saving', error: '' });
       let existing: FileSystemFileHandle | null = null;
       try { existing = await target.getFileHandle(artifact.filename); } catch (error) { if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error; }
@@ -114,10 +118,35 @@ export async function saveHtmlToFolder(artifact: HtmlArtifact): Promise<string> 
       return saved;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The file could not be written to your PC.';
-      if (session === generation) update({ status: state.status === 'permission' ? 'permission' : 'connected', error: message });
+      const permissionLost = error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name);
+      if (session === generation) update({ status: state.status === 'permission' || permissionLost ? 'permission' : 'connected', error: message });
       throw new Error(message);
     }
   });
   writeQueue = operation;
   return operation;
+}
+
+// A generated file waits for the initial connection or restored permission, without a Save click.
+export async function autoSaveHtmlToFolder(artifact: HtmlArtifact, onSaved?: (destination: string) => void): Promise<{ saved: true; destination: string } | { saved: false; reason: string }> {
+  await restoreConnectedFolder();
+  if (['connected', 'saving'].includes(state.status)) {
+    try { return { saved: true, destination: await saveHtmlToFolder(artifact) }; }
+    catch (error) { if (state.status !== 'permission') throw error; }
+  }
+  if (!pendingExports.has(artifact.filename) && pendingExports.size >= 10) throw new Error('Ten HTML files are already waiting for a folder. Connect your folder to save them before creating more.');
+  pendingExports.set(artifact.filename, { artifact, onSaved }); update({ pendingCount: pendingExports.size });
+  return { saved: false, reason: state.status === 'permission' ? 'Reconnect the folder to save this file automatically.' : 'Connect a folder to save this file automatically.' };
+}
+
+async function flushPendingHtml(): Promise<void> {
+  for (const [filename, pending] of pendingExports) {
+    if (!['connected', 'saving'].includes(state.status)) break;
+    try {
+      const destination = await saveHtmlToFolder(pending.artifact);
+      if (pendingExports.get(filename) === pending) pendingExports.delete(filename);
+      update({ pendingCount: pendingExports.size });
+      pending.onSaved?.(destination);
+    } catch { break; /* Keep the actual source ready for a later connection attempt. */ }
+  }
 }

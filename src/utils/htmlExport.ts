@@ -2,6 +2,15 @@ import type { EngineeringFile } from '../types/engineering.ts';
 import { buildProjectHtml } from './projectFiles.ts';
 
 export interface HtmlArtifact { html: string; filename: string; title: string }
+export class MissingHtmlArtifactError extends Error {
+  constructor(name?: string) { super(name ? `No complete HTML source for “${name}” was returned.` : 'No complete HTML source was returned.'); this.name = 'MissingHtmlArtifactError'; }
+}
+
+export function requestsHtmlCreation(prompt: string): boolean {
+  return /\b(?:create|build|make|develop|generate|write|implement|finish|fix|update)\b/i.test(prompt) && /\b(?:html|game|website|webpage|web page|three\.js|arena shooter)\b/i.test(prompt) && !/\b(?:python|unity|unreal|godot|java|c\+\+)\b/i.test(prompt);
+}
+
+export const refusesHtmlSave = (prompt: string): boolean => /\b(?:do not|don't|never|without)\s+(?:automatically\s+)?(?:export|download|save|saving)\b/i.test(prompt);
 
 export function htmlFilename(name: string): string {
   // oxlint-disable-next-line no-control-regex -- Windows filenames cannot contain control characters.
@@ -38,8 +47,13 @@ export function conversationHtml(history: { type: string; text: string }[], name
   for (const line of history) {
     if (line.type === 'input') { request = line.text; continue; }
     if (line.type !== 'output') continue;
-    const blocks = [...line.text.matchAll(/```(?:html?|[\w-]*)\s*\n([\s\S]*?)```/gi)].map(match => match[1]);
+    // Providers sometimes omit the final Markdown fence even when </html> is complete.
+    const blocks = [...line.text.matchAll(/```[^\n`]*\n([\s\S]*?)(?:```|$)/gi)].map(match => match[1]);
     if (completeHtml(line.text)) blocks.push(line.text);
+    if (!blocks.some(completeHtml)) {
+      const rawDocument = /(?:<!doctype\s+html[^>]*>\s*)?<html\b[\s\S]*<\/html\s*>/i.exec(line.text)?.[0];
+      if (rawDocument) blocks.push(rawDocument);
+    }
     for (const html of blocks) {
       if (!completeHtml(html)) continue;
       const title = htmlTitle(html);
@@ -49,7 +63,7 @@ export function conversationHtml(history: { type: string; text: string }[], name
   const normalized = name?.toLowerCase().trim();
   const pattern = normalized ? new RegExp(`(?:^|[^\\w])${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^\\w])`, 'i') : null;
   const artifact = pattern ? artifacts.findLast(item => pattern.test(item.title)) ?? artifacts.findLast(item => pattern.test(item.context)) : artifacts.at(-1);
-  if (!artifact) throw new Error(name ? `No complete HTML for “${name}” was found in this conversation. Ask the agent for the complete game in one HTML code block, then export it to your connected folder.` : 'No complete HTML game was found in this conversation. Ask for the complete game in one HTML code block, then export it to your connected folder.');
+  if (!artifact) throw new MissingHtmlArtifactError(name);
   return projectHtmlArtifact([{ path: 'index.html', content: artifact.html }], 'index.html', name || artifact.title);
 }
 

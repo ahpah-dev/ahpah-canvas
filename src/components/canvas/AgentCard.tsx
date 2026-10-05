@@ -47,7 +47,7 @@ function CodeBlock({ text, language, complete }: { text: string; language: strin
   const [copied, setCopied] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [saving, setSaving] = useState(false);
-  const isHtml = complete && completeHtml(text);
+  const isHtml = completeHtml(text) && (complete || /<\/html\s*>\s*$/i.test(text));
   const save = async () => {
     setSaving(true); setSaveStatus('Saving to your PC…');
     try {
@@ -415,7 +415,8 @@ function AgentCardBody({
                   ? card.lastAction
                   : `Waiting for ${providerName}`}
               </span>
-              <small>{elapsed}s elapsed · Up to 3 minutes · Stop at any time.</small>
+              <small>{elapsed}s elapsed · Stop at any time.</small>
+              <small>Completed HTML saves automatically. Missing source is recovered before saving.</small>
               {kilo && configuredModel === "kilo-auto/free" && (
                 <small>Switches free models if no answer starts within 30s.</small>
               )}

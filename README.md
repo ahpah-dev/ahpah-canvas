@@ -24,6 +24,10 @@ An open source agentic coding workspace with real project files, an editor, visi
 
 ## Start locally
 
+On Windows, install **Node.js 24 or newer**, extract or clone the repository, and double-click **Start AhPah.bat**. It installs missing dependencies on the first launch, starts the local server, and opens the app in your default browser. Keep the launcher window open while using the app; press **Ctrl+C** to stop it. The launcher keeps port 5173 fixed so your saved browser workspace stays on the same address.
+
+To start from a terminal instead:
+
 Install **Node.js 24 or newer**, then run:
 
 ```powershell
@@ -60,7 +64,9 @@ Imported projects support up to **200 text files**, **256 KB per file**, and **2
 
 Open **Connect folder** in the workspace's top bar, choose a local folder, and grant read/write permission. Desktop Chrome and Edge support this connection on localhost and the HTTPS Pages site. The directory handle is remembered in IndexedDB; if the browser revokes permission, click **Reconnect folder** before exporting again.
 
-In a Canvas conversation containing a complete game, ask **Export the game "HATE" to my PC as HTML**. The app finds that game's complete HTML and writes **HATE.html** into the connected folder without a download dialog or another model request. Complete HTML code blocks also have **Save to folder**. Requests to generate and export HTML save the completed document after the provider returns it.
+Completed HTML games and pages save automatically to the connected folder when the provider finishes; a separate **Save to folder** click is not required. If no folder is connected yet, up to ten files wait in the current session and save when you choose or reconnect a folder. The conversation receives the actual destination after the write completes. Saying not to save disables automatic saving for that response.
+
+For an existing game, ask **Export the game "HATE" to my PC as HTML**. If its complete source exists in the conversation, the app saves **HATE.html** immediately without another model request. If the provider previously returned only a creation claim, missing local assets, or truncated source, Canvas requests the actual complete implementation and can make two additional recovery attempts. Recovery generates missing source from the conversation specifications; it does not pretend to recover a file that never existed. Complete HTML without a closing Markdown fence is also recognized. If the model still fails, the app reports that nothing was saved and retains the conversation.
 
 In Code, **Save HTML** bundles the selected HTML entry and its local CSS, JavaScript, and text assets into one file. Missing local resources stop the export with a clear error. The coding agent can also use `export_html` when your goal requests a save/export. Exports of proposed files do not apply those edits to the editor. External URLs still require a connection.
 

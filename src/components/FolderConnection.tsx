@@ -16,9 +16,10 @@ export function FolderConnection() {
     {open && <div className="cw-folder-backdrop" onClick={() => setOpen(false)}><section className="cw-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title" onClick={event => event.stopPropagation()}>
       <button className="cw-folder-close" aria-label="Close folder connection" onClick={() => setOpen(false)}><X size={18} /></button>
       <span className="cw-folder-icon"><FolderOpen size={25} /></span><h2 id="folder-title">Your canvas. Your folder.</h2>
-      <p>Connect a folder on your PC. When you ask to export HTML, Canvas writes the file straight into that folder.</p>
+      <p>Connect a folder on your PC. Completed HTML games and pages save there automatically, including files ready before you connect.</p>
       <div className="cw-folder-destination"><small>EXPORT DESTINATION</small><strong>{state.name || 'Choose a local folder'}</strong><span>{connected ? 'Connected · automatic exports enabled' : state.status === 'permission' ? 'Reconnect to restore write permission' : 'Browser permission required once you choose a folder'}</span></div>
       {state.lastSaved && <p className="cw-folder-saved"><Check size={14} />Saved {state.lastSaved}</p>}
+      {state.pendingCount > 0 && <p className="cw-folder-saved" role="status">{state.pendingCount} HTML {state.pendingCount === 1 ? 'file is' : 'files are'} ready. {connected ? 'Saving automatically…' : 'Choose or reconnect your folder to save automatically.'}</p>}
       <p className="cw-folder-hint">Your connection is remembered on this device. Replacing an HTML file keeps its previous version as .previous.html.</p>
       {!state.supported && <p role="status" className="cw-folder-error">Folder access requires desktop Chrome or Edge. Open this site there to connect your PC folder.</p>}
       {state.error && <p role="status" className="cw-folder-error">{state.error}</p>}

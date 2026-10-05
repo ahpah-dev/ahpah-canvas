@@ -31,8 +31,9 @@ import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
 import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
-import { conversationHtml, htmlExportRequest, requestsHtmlExport } from './utils/htmlExport';
-import { saveHtmlToFolder } from './utils/connectedFolder';
+import { conversationHtml, htmlExportRequest, requestsHtmlExport, requestsHtmlCreation, refusesHtmlSave } from './utils/htmlExport';
+import type { HtmlArtifact } from './utils/htmlExport';
+import { autoSaveHtmlToFolder } from './utils/connectedFolder';
 
 const CodingWorkspace = React.lazy(() => import("./components/engineering/CodingWorkspace").then((module) => ({ default: module.CodingWorkspace })));
 
@@ -488,6 +489,11 @@ export function App() {
     };
     const outputId = crypto.randomUUID();
     let partialAnswer = "";
+    let generatedTokens = 0;
+    const savedAfterConnection = (destination: string) => {
+      const message = `Saved automatically to your PC: ${destination}.`;
+      setCards(previous => previous.map(item => item.id === cardId ? { ...item, ...(item.status === 'idle' ? { lastAction: message } : {}), history: [...item.history, { id: crypto.randomUUID(), type: 'system', text: message, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }] } : item));
+    };
     setCards((previous) =>
       previous.map((item) =>
         item.id === cardId
@@ -513,15 +519,21 @@ export function App() {
     };
     const run = async () => {
       const exportRequest = htmlExportRequest(prompt);
+      const followsHtmlGoal = /^(?:ok(?:ay)?[,!. ]*)?(?:do it|go ahead|continue|finish it|make it|yes|sure)[.! ]*$/i.test(prompt) && card.history.some(line => line.type === 'input' && (requestsHtmlCreation(line.text) || requestsHtmlExport(line.text)));
+      const requiresHtml = Boolean(exportRequest) || requestsHtmlExport(prompt) || requestsHtmlCreation(prompt) || followsHtmlGoal;
+      let missingSource = false;
       if (exportRequest) {
-        let message: string;
-        try {
-          const artifact = conversationHtml(card.history, exportRequest.name);
-          const saved = await saveHtmlToFolder(artifact);
-          message = `Saved ${artifact.filename} to your connected PC folder: ${saved}. Open the HTML file from that folder to play it.`;
-        } catch (error) { message = error instanceof Error ? error.message : 'Could not save the HTML file to your PC.'; }
-        complete({ status: 'idle', lastAction: message, history: [...card.history, input, { id: outputId, text: message, type: 'system', timestamp }] });
-        return;
+        let artifact: HtmlArtifact | undefined;
+        try { artifact = conversationHtml(card.history, exportRequest.name); } catch { missingSource = true; }
+        if (artifact) {
+          let message: string;
+          try {
+            const result = await autoSaveHtmlToFolder(artifact, savedAfterConnection);
+            message = result.saved ? `Saved automatically to your PC: ${result.destination}.` : `${artifact.filename} is ready. ${result.reason}`;
+          } catch (error) { message = error instanceof Error ? error.message : 'Could not save the HTML file to your PC.'; }
+          complete({ status: 'idle', lastAction: message, history: [...card.history, input, { id: outputId, text: message, type: 'system', timestamp }] });
+          return;
+        }
       }
       if (isSimulated) {
         await new Promise((resolve) => window.setTimeout(resolve, 450));
@@ -571,14 +583,20 @@ export function App() {
             },
           ]
         : [];
-      const result = await sendGatewayPrompt(
+      const instructions = { role: 'system' as const, content: 'You are an implementation agent in Canvas. When asked to create a browser game or page, return its ACTUAL COMPLETE SOURCE in one fenced html document, with embedded CSS and JavaScript and a closing </html>. Implement the requested functionality, not a description of a supposedly created file. You have no independent file-writing tool. Canvas automatically writes complete HTML to the connected PC folder after the response finishes. NEVER instruct the user to click Save to Folder or claim a file was saved before an actual app result. No fictitious artifacts, buttons, file links, or tools. Keep the implementation compact enough to return in full. External HTTPS libraries such as Three.js are allowed; include their real loading code.' };
+      const requestPrompt = missingSource ? `${prompt}\nActual app check: the conversation has no usable complete HTML source for this game. Generate the missing complete game file now from the user's specifications in this conversation. Return the source, not another creation claim. Canvas will save it automatically. Do not claim that an earlier file was recovered.` : prompt;
+      const baseMessages = [instructions, ...context, ...history];
+      const gatewayConfig = loadGatewayConfig();
+      let recoveryAttempt = 0;
+      const receive = (request: string, messages = baseMessages) => sendGatewayPrompt(
         card.agentType === "custom" ? "custom" : card.agentType === "kilo" ? "kilo" : "omniroute",
-        prompt,
-        loadGatewayConfig(),
+        request,
+        gatewayConfig,
         {
           signal: controller.signal,
           providerId: card.providerId,
-          messages: [{ role: 'system', content: 'You help with software engineering in Canvas. You cannot write to the PC yourself. The app saves complete HTML through its connected folder. Never claim a file was saved, downloaded, or exported without an actual app result. For HTML games provide one complete fenced html document including embedded CSS and JavaScript, not truncated snippets. Direct export requests are handled by the app.' }, ...context, ...history],
+          maxTokens: requiresHtml ? 8192 : undefined,
+          messages,
           onProgress: ({ text, phase, detail }) => {
             if (
               controller.signal.aborted ||
@@ -596,7 +614,7 @@ export function App() {
               item.id === cardId ? {
                 ...item,
                 status: phase === "answer" ? "working" : "thinking",
-                lastAction,
+                lastAction: recoveryAttempt ? `Completing HTML · recovery ${recoveryAttempt}/2 · ${lastAction}` : lastAction,
                 history: [
                   ...item.history.filter((line) => line.id !== outputId),
                   ...(text ? [{ id: outputId, text, type: "output" as const, timestamp }] : []),
@@ -605,18 +623,35 @@ export function App() {
             ));
           },
         },
-      );
+      ).then(answer => { generatedTokens += answer.tokens; return answer; });
+      let result = await receive(requestPrompt);
       if (controller.signal.aborted || requests.current.get(cardId) !== controller) return;
+      let artifact: HtmlArtifact | undefined;
+      let artifactError = '';
+      let previousPrompt = requestPrompt;
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try { artifact = conversationHtml([{ type: 'input', text: prompt }, { type: 'output', text: result.text }], exportRequest?.name); artifactError = ''; break; }
+        catch (error) { artifactError = error instanceof Error ? error.message : 'No usable HTML source was supplied.'; }
+        if (!requiresHtml || attempt === 2) break;
+        recoveryAttempt = attempt + 1;
+        setCards(previous => previous.map(item => item.id === cardId ? { ...item, lastAction: `Generating the missing complete HTML source · recovery ${attempt + 1}/2` } : item));
+        const recoveryMessages = [...baseMessages, { role: 'user' as const, content: requestPrompt }, { role: 'assistant' as const, content: result.text.slice(0, 32000) }];
+        previousPrompt = `Actual app validation failed: ${artifactError}\nOriginal goal: ${prompt}\nReturn ONE complete playable HTML document with a real implementation, title, embedded CSS and JavaScript, and </html>. Include every required local asset inline. If your previous response only described a game, implement the game now using the conversation specifications. If it was truncated, return a smaller COMPLETE working version. No summaries, save instructions, placeholders, or claims. The app saves the validated file automatically.`;
+        result = await receive(previousPrompt, recoveryMessages);
+        if (controller.signal.aborted || requests.current.get(cardId) !== controller) return;
+      }
       let saveMessage = '';
-      if (requestsHtmlExport(prompt)) {
+      let saveFailed = false;
+      if (artifact && !refusesHtmlSave(prompt)) {
         try {
-          const artifact = conversationHtml([{ type: 'input', text: prompt }, { type: 'output', text: result.text }]);
-          const saved = await saveHtmlToFolder(artifact);
-          saveMessage = `Saved ${artifact.filename} to your connected PC folder: ${saved}.`;
-        } catch (error) { saveMessage = error instanceof Error ? error.message : 'The generated HTML could not be saved to your PC.'; }
+          const saved = await autoSaveHtmlToFolder(artifact, savedAfterConnection);
+          saveMessage = saved.saved ? `${missingSource ? 'Generated the missing HTML source from the conversation. ' : ''}Saved automatically to your PC: ${saved.destination}.` : `${artifact.filename} is complete and ready. ${saved.reason} No Save button is needed.`;
+        } catch (error) { saveFailed = true; saveMessage = error instanceof Error ? error.message : 'The generated HTML could not be saved to your PC.'; }
+      } else if (requiresHtml && !artifact) {
+        saveFailed = true; saveMessage = `The model did not produce a complete HTML file after automatic recovery. Nothing was saved. ${artifactError} Try a smaller game or another model; your conversation has been kept.`;
       }
       complete({
-        status: "idle",
+        status: saveFailed ? 'error' : 'idle',
         history: [
           ...card.history,
           input,
@@ -629,9 +664,9 @@ export function App() {
               minute: "2-digit",
             }),
           },
-          ...(saveMessage ? [{ id: crypto.randomUUID(), text: saveMessage, type: 'system' as const, timestamp }] : []),
+          ...(saveMessage ? [{ id: crypto.randomUUID(), text: saveMessage, type: saveFailed ? 'error' as const : 'system' as const, timestamp }] : []),
         ],
-        tokensUsed: card.tokensUsed + result.tokens,
+        tokensUsed: card.tokensUsed + generatedTokens,
         cpuPercent: 0,
         routedModel: result.model,
         modelSource: "live",
@@ -641,6 +676,7 @@ export function App() {
     void run().catch((error) => {
       complete({
         status: "error",
+        tokensUsed: card.tokensUsed + generatedTokens,
         cpuPercent: 0,
         lastAction: "Gateway request failed",
         history: [
