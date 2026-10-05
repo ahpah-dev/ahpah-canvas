@@ -1,7 +1,10 @@
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { clearKiloRouteHealth } from '../src/utils/kiloRecovery.ts';
+beforeEach(clearKiloRouteHealth);
 import {
   autoConfigureGateways,
+  KILO_CODING_PROBE,
   discoveryCandidates,
   freeModelCandidates,
   type SetupProgress,
@@ -28,7 +31,7 @@ const json = (value: unknown, status = 200) =>
 const ready = () =>
   json({
     model: "resolved-current-model",
-    choices: [{ message: { content: "READY" } }],
+    choices: [{ message: { content: JSON.stringify({ actions: [{ tool: 'finish', summary: 'READY', review: 'No files changed. No commands run.' }] }) } }],
   });
 
 test("discovery normalizes root URLs and tries only equivalent loopback addresses", () => {
@@ -112,7 +115,7 @@ test("setup tries a fallback, verifies both providers, and leaves room for reaso
     attempts.push(payload.model);
     assert.equal(payload.max_tokens, 1024);
     assert.deepEqual(payload.messages, [
-      { role: "user", content: "Reply with the single word READY." },
+      { role: "user", content: url.includes('/kilo/') ? KILO_CODING_PROBE : "Reply with the single word READY." },
     ]);
     return payload.model === "auto/best-free"
       ? json({ error: { message: "Model unavailable" } }, 404)
@@ -156,6 +159,18 @@ test("partial setup preserves failed provider settings and never promotes a cata
   assert.deepEqual(result.providers[0].config, {});
   assert.equal(result.config.omniRouteModel, config.omniRouteModel);
   assert.equal(result.providers[1].verified, true);
+});
+
+test('Kilo setup rejects a plain READY reply that cannot produce coding actions', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url: string) => url.includes('/models')
+    ? json({ data: url.includes('/kilo/') ? [{ id: 'kilo-auto/free' }] : [] })
+    : json({ model: 'broken/free', choices: [{ message: { content: 'READY' } }] }));
+  const result = await autoConfigureGateways(config, new AbortController().signal, () => {});
+  const kilo = result.providers.find(provider => provider.provider === 'kilo')!;
+  assert.equal(kilo.verified, false);
+  assert.deepEqual(kilo.config, {});
+  assert.match(kilo.detail, /coding actions/);
+  assert.equal(result.config.kiloModel, config.kiloModel);
 });
 
 test("setup stops retries on an HTTP rate limit even if the message omits its status", async (t) => {

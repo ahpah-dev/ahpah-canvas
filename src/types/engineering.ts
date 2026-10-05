@@ -32,6 +32,7 @@ export interface EngineeringChangeSet {
 export interface EngineeringProvider { id: string; label: string; model: string }
 export interface AgentMessage { role: 'system' | 'user' | 'assistant'; content: string }
 export interface AgentProgress { text: string; model?: string; phase?: string; detail?: string }
+export interface AgentRoutingState { model?: string; excludedModels: string[]; automatic?: boolean }
 export type AgentSender = (request: {
   providerId: string;
   runId?: string;
@@ -39,6 +40,8 @@ export type AgentSender = (request: {
   messages: AgentMessage[];
   signal: AbortSignal;
   onProgress?: (progress: AgentProgress) => void;
+  routing?: AgentRoutingState;
+  validateResponse?: (text: string) => void;
 }) => Promise<{ text: string; model: string; tokens: number }>;
 
 export type AgentPhase = 'planning' | 'implementing' | 'reviewing' | 'ready' | 'error' | 'stopped';

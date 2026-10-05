@@ -17,6 +17,7 @@ An open source agentic coding workspace with real project files, an editor, visi
 - Named custom API profiles with a base URL, optional API key, selected model, and streaming preference.
 - Canvas coding agents with real list/read/search/write/patch tools, visible action results, persistent source projects, cancellation, and automatic PC delivery after source review.
 - Kilo Auto Free recovery that checks the live catalog and uses verified free routes when a route stalls or returns an empty answer.
+- Kilo coding compatibility checks, consistent free routing during each agent run, and automatic recovery from repeated actions without discarding staged source.
 - An infinite canvas with drag, resize, pan, zoom, minimap, card arrangement, and shared project memory.
 - Notes, embedded previews, saved command snippets, workspace import and export, and browser-local persistence.
 - Midnight, Graphite, and Daylight themes, custom accents, grid styles, and motion preferences that respect reduced-motion settings.
@@ -115,7 +116,9 @@ Enter your gateway's OpenAI compatible base URL, such as `http://localhost:20128
 
 The default route is `kilo-auto/free`. Load Kilo's current catalog to choose another supported text model. Paid models require the credentials and credits specified by Kilo; availability and rate limits are controlled by the provider.
 
-Auto Free waits up to 30 seconds for the first answer and can try up to three routes within a shared three-minute deadline. Recovery only uses live text models with explicit zero prices, excluding retiring and retired models. A route that stalls is skipped for five minutes in the current session. After text starts, a partial answer is kept rather than replaced by another attempt. Authentication, billing, rate limits, refusals, invalid responses, and tool-only results stop automatic recovery.
+Auto Free waits up to 30 seconds for the first answer and can try up to three routes within a shared three-minute deadline. Recovery only uses live text models with explicit zero prices, excluding retiring and retired models. A route that stalls is skipped for five minutes in the current session. After text starts, a partial answer is kept rather than replaced by another attempt. Authentication, billing, rate limits, refusals, invalid completion envelopes, and tool-only results stop automatic recovery.
+
+**Verify Auto Free** and automatic setup check structured coding actions instead of accepting a plain “READY” reply. Coding runs keep the effective model when the live catalog confirms it is free. Malformed complete coding replies and repeated actions can switch to another verified free route while keeping the goal, real tool results, and current source. Recovery is bounded; if no route makes progress, the run stops early and retains staged files. Identical rewrites preserve source review, and repeated exports of the same source reuse the confirmed delivery result.
 
 ### Custom API providers
 

@@ -150,3 +150,53 @@ test('steps, deadline, and goal size are bounded with actionable recovery', asyn
   await assert.rejects(runEngineeringAgent(options(sequence([]), { goal: '' })), /Describe a goal/);
   await assert.rejects(runEngineeringAgent(options(sequence([]), { goal: 'a'.repeat(AGENT_MAX_GOAL_CHARS + 1) })), /Describe a goal/);
 });
+
+test('identical rewrites preserve completed Canvas source review', async () => {
+  const content = 'const value = 2;';
+  let saves = 0;
+  const result = await runEngineeringAgent(options(sequence([
+    json([planned, { tool: 'read_file', path: 'app.js' }, { tool: 'write_file', path: 'app.js', content }, { tool: 'read_file', path: 'app.js' }]),
+    json([{ tool: 'write_file', path: 'app.js', content }, finished]),
+  ]), { mode: 'canvas', syncFiles: async () => { saves++; return { saved: true, destination: 'connected-folder/app.js' }; } }));
+  assert.equal(result.completed, true);
+  assert.equal(result.error, undefined);
+  assert.equal(saves, 1);
+  assert.equal(result.activities.filter(activity => activity.title === 'Prepared app.js').length, 1);
+});
+
+test('a read ending beyond EOF returns the actual complete source instead of creating an error loop', async () => {
+  let calls = 0;
+  const result = await runEngineeringAgent(options(async request => {
+    if (++calls === 1) return { text: json([planned, { tool: 'read_file', path: 'app.js', startLine: 1, endLine: 100 }]), model: 'actual-model', tokens: 1 };
+    assert.match(request.prompt, /"complete":true/);
+    assert.match(request.prompt, /"endLine":3/);
+    assert.doesNotMatch(request.prompt, /Line range exceeds/);
+    return { text: json([finished]), model: 'actual-model', tokens: 1 };
+  }));
+  assert.equal(result.completed, true);
+  assert.equal(calls, 2);
+});
+
+test('repeating completed inspections stops early and retains actual staged source', async () => {
+  let calls = 0;
+  const result = await runEngineeringAgent(options(async () => {
+    calls++;
+    return { text: calls === 1 ? json([planned, { tool: 'read_file', path: 'app.js' }, { tool: 'write_file', path: 'app.js', content: 'const value = 2;' }]) : json([{ tool: 'read_file', path: 'app.js' }]), model: 'repeating-model', tokens: 1 };
+  }));
+  assert.equal(calls, 4);
+  assert.equal(result.completed, false);
+  assert.match(result.error!, /repeated actions without making progress/);
+  assert.equal(result.changeSet.changes[0].after, 'const value = 2;');
+});
+
+test('cycling between earlier source versions does not count as new progress', async () => {
+  let calls = 0;
+  const original = project().files[0].content;
+  const result = await runEngineeringAgent(options(async () => {
+    const content = ++calls % 2 ? 'const value = 2;' : original;
+    return { text: json([planned, { tool: 'read_file', path: 'app.js' }, { tool: 'write_file', path: 'app.js', content }]), model: 'cycling-model', tokens: 1 };
+  }));
+  assert.equal(calls, 3);
+  assert.match(result.error!, /repeated actions/);
+  assert.equal(result.changeSet.changes[0].after, 'const value = 2;');
+});

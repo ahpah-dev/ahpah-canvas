@@ -20,6 +20,7 @@ import {
 import {
   listKiloModels,
   listOmniRouteModels,
+  sendGatewayPrompt,
   type GatewayModel,
   loadGatewayConfig,
   saveGatewayConfig,
@@ -34,6 +35,8 @@ import { useDialogFocus } from "../../utils/useDialogFocus";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import {
   autoConfigureGateways,
+  KILO_CODING_PROBE,
+  validateKiloCodingProbe,
   type SetupProgress,
 } from "../../utils/autoConfiguration";
 import { AppearancePanel } from "./AppearancePanel";
@@ -144,6 +147,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [saveError, setSaveError] = useState("");
   const checkingCatalog = omniState === "checking" || kiloState === "checking";
   const setupController = useRef<AbortController | null>(null);
+  const kiloCheckController = useRef<AbortController | null>(null);
   const automaticallyStarted = useRef(false);
   const runAuto = useCallback(async () => {
     if (setupController.current || checkingCatalog) return;
@@ -247,6 +251,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => window.clearTimeout(timer);
   }, [isOpen, autoOnOpen, runAuto]);
   useEffect(() => () => setupController.current?.abort(), []);
+  useEffect(() => {
+    return () => { kiloCheckController.current?.abort(); kiloCheckController.current = null; };
+  }, [isOpen, kiloModel, kiloKey, transport]);
 
   if (!present) return null;
 
@@ -303,23 +310,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const checkKilo = async () => {
+    if (running || kiloCheckController.current) return;
+    const controller = new AbortController();
+    kiloCheckController.current = controller;
+    controller.signal.addEventListener('abort', () => {
+      if (kiloCheckController.current === controller) setKiloState('idle');
+    }, { once: true });
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
     setKiloState("checking");
     setKiloError("");
     try {
-      const models = await listKiloModels(undefined, config);
+      const models = await listKiloModels(signal, config);
+      signal.throwIfAborted();
       if (!models.length)
         throw new Error("Kilo responded, but no models were returned.");
       setKiloModels(models);
-      if (!models.some((model) => model.id === "kilo-auto/free"))
+      if (config.kiloModel === "kilo-auto/free" && !models.some((model) => model.id === "kilo-auto/free"))
         throw new Error(
           "The current Kilo catalog did not include kilo-auto/free.",
         );
-      setKiloState("connected");
+      if (config.kiloModel === "kilo-auto/free") {
+        const result = await sendGatewayPrompt('kilo', KILO_CODING_PROBE, config, {
+          signal, maxTokens: 1024, firstAnswerTimeoutMs: 5_000, validateResponse: validateKiloCodingProbe,
+        });
+        signal.throwIfAborted();
+        validateKiloCodingProbe(result.text);
+        setKiloState("verified");
+      } else setKiloState("connected");
     } catch (error) {
+      if (controller.signal.aborted) return;
       setKiloState("error");
       setKiloError(
         error instanceof Error ? error.message : "Connection failed.",
       );
+    } finally {
+      if (kiloCheckController.current === controller) kiloCheckController.current = null;
     }
   };
 
@@ -734,20 +759,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[11px] text-slate-500">
                     {kiloModel === "kilo-auto/free"
-                      ? "The model behind Auto Free updates automatically on Kilo’s side."
+                      ? "Keeps a verified free route during each coding run and switches routes if actions repeat."
                       : "Requests use this exact model ID, without Auto Free routing."}
                   </p>
                   <button
                     type="button"
                     onClick={checkKilo}
-                    disabled={kiloState === "checking"}
+                    disabled={kiloState === "checking" || running}
                     className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/15 bg-cyan-200/[.07] px-3.5 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-200/[.12] disabled:opacity-50"
                   >
                     <RefreshCw
                       size={13}
                       className={kiloState === "checking" ? "animate-spin" : ""}
                     />
-                    Check Kilo catalog
+                    {kiloModel === "kilo-auto/free" ? "Verify Auto Free" : "Check Kilo catalog"}
                   </button>
                 </div>
                 {!kiloKey && !kiloRequiresKey && (

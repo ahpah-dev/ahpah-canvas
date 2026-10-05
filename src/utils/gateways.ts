@@ -31,6 +31,10 @@ export type GatewayConfig = {
 
 const KILO_BASE = "/api/gateway/kilo";
 const KILO_UPSTREAM = "https://api.kilo.ai/api/gateway";
+class UnusableCodingResponseError extends Error {
+  model: string;
+  constructor(message: string, model: string) { super(message); this.model = model; }
+}
 
 export function supportsLocalBridge(): boolean {
   if (import.meta.env?.VITE_GATEWAY_TRANSPORT === "direct") return false;
@@ -250,6 +254,8 @@ export async function sendGatewayPrompt(
     onProgress?: (progress: GatewayProgress) => void;
     firstAnswerTimeoutMs?: number;
     providerId?: string;
+    routing?: { model?: string; excludedModels: string[]; automatic?: boolean };
+    validateResponse?: (text: string) => void;
   } = {},
 ): Promise<{ text: string; model: string; tokens: number }> {
   const isKilo = provider === "kilo";
@@ -267,13 +273,14 @@ export async function sendGatewayPrompt(
   ]);
   const maxTokens = options.maxTokens ?? (isKilo ? 8192 : 2048);
   const automatic = isKilo && model === "kilo-auto/free";
+  if (options.routing) options.routing.automatic = automatic;
   const firstAnswerLimit = Number.isFinite(options.firstAnswerTimeoutMs)
     ? Math.max(1, Math.min(AUTO_FREE_FIRST_ANSWER_MS, options.firstAnswerTimeoutMs!))
     : AUTO_FREE_FIRST_ANSWER_MS;
   let tokens = 0;
   let target: GatewayModel = { id: model };
   let fallbackModels: GatewayModel[] | undefined;
-  const excluded = new Set([model]);
+  const excluded = new Set([model, ...(options.routing?.excludedModels || [])]);
   const nextFreeModel = async () => {
     if (!fallbackModels) {
       try {
@@ -288,10 +295,17 @@ export async function sendGatewayPrompt(
     }
     return fallbackModels.find((item) => !excluded.has(item.id) && isKiloRouteHealthy(item.id));
   };
-  if (automatic && !isKiloRouteHealthy(model)) {
+  if (automatic && options.routing?.model && !excluded.has(options.routing.model)) {
+    await nextFreeModel();
+    const preferred = fallbackModels?.find(item => item.id === options.routing!.model && !excluded.has(item.id) && isKiloRouteHealthy(item.id));
+    if (preferred) target = preferred;
+  }
+  if (automatic && target.id === model && (!isKiloRouteHealthy(model) || options.routing?.excludedModels.includes(model))) {
     const fallback = await nextFreeModel();
     if (!fallback)
-      throw new Error("Auto Free recently stalled and no other eligible free model is available. Check Kilo's availability or try again later.");
+      throw new Error(options.routing?.excludedModels.includes(model)
+        ? "The previous Kilo route stopped making progress and no other eligible free model is available. Any staged source has been kept; choose another model to continue."
+        : "Auto Free recently stalled and no other eligible free model is available. Check Kilo's availability or try again later.");
     target = fallback;
   }
   const request = {
@@ -376,7 +390,22 @@ export async function sendGatewayPrompt(
           `${resolvedModel} blocked this response. Rephrase the prompt and try again.`,
         );
       if (refusal.trim()) return { text: refusal, model: resolvedModel, tokens };
-      if (text.trim()) return { text, model: resolvedModel, tokens };
+      if (text.trim()) {
+        if (options.validateResponse && automatic) {
+          try { options.validateResponse(text); }
+          catch (failure) {
+            throw new UnusableCodingResponseError(`${resolvedModel} returned unusable coding actions: ${failure instanceof Error ? failure.message : 'Invalid response'}`, resolvedModel);
+          }
+        }
+        if (automatic && options.routing) {
+          await nextFreeModel();
+          // Pin only catalog-confirmed free routes; a router-reported ID is not price evidence.
+          const effective = fallbackModels?.find(item => item.id === resolvedModel && !excluded.has(item.id))
+            || fallbackModels?.find(item => item.id === target.id && !excluded.has(item.id));
+          if (effective) options.routing.model = effective.id;
+        }
+        return { text, model: resolvedModel, tokens };
+      }
       if (choice?.finish_reason === "tool_calls" || message?.tool_calls?.length)
         throw new Error(
           `${resolvedModel} returned a tool call without an answer. This request expects text or structured coding actions in the response; choose a model that follows those instructions.`,
@@ -406,15 +435,18 @@ export async function sendGatewayPrompt(
       const error = local.signal.aborted ? local.signal.reason : caught;
       if (error instanceof Error && key && error.message.includes(key))
         Object.defineProperty(error, "message", { value: redactProviderError(error.message, [key]), configurable: true });
-      const recoverable = error instanceof NoAnswerError || error instanceof EmptyCompletionError ||
+      const recoverable = error instanceof UnusableCodingResponseError || error instanceof NoAnswerError || error instanceof EmptyCompletionError ||
         (error instanceof GatewayServiceError && [404, 408, 410, 500, 502, 503, 504].includes(error.status || 0));
-      if (!automatic || hasAnswer || !recoverable) throw error;
+      if (!automatic || (hasAnswer && !(error instanceof UnusableCodingResponseError)) || !recoverable) throw error;
       excluded.add(target.id);
       excluded.add(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
+      if (error instanceof UnusableCodingResponseError) excluded.add(error.model);
+      if (options.routing) options.routing.excludedModels = [...new Set([...options.routing.excludedModels, ...excluded])];
       markKiloRouteUnhealthy(target.id);
       markKiloRouteUnhealthy(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
+      if (error instanceof UnusableCodingResponseError) markKiloRouteUnhealthy(error.model);
       if (attempt >= 2) throw error;
-      options.onProgress?.({ text: "", phase: "retrying", detail: `${label} did not answer. Finding another current free model` });
+      options.onProgress?.({ text: "", phase: "retrying", detail: error instanceof UnusableCodingResponseError ? `${label} returned unusable coding actions. Finding another current free model` : `${label} did not answer. Finding another current free model` });
       const fallback = await nextFreeModel();
       if (!fallback) throw error;
       target = fallback;

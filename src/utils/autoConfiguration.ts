@@ -6,6 +6,13 @@ import {
   type GatewayModel,
 } from "./gateways.ts";
 import { isFreeModel, sortModelCatalog } from "./modelCatalog.ts";
+import { parseAgentActions } from "./agentRuntime.ts";
+
+export const KILO_CODING_PROBE = 'Coding action compatibility check: return only this JSON object, without Markdown or commentary: {"actions":[{"tool":"finish","summary":"READY","review":"No files changed. No commands run."}]}';
+export function validateKiloCodingProbe(text: string): void {
+  const actions = parseAgentActions(text);
+  if (actions.length !== 1 || actions[0].tool !== 'finish') throw new Error('The route did not follow the read-only coding compatibility check.');
+}
 
 export type SetupProgress = {
   provider: "omniroute" | "kilo";
@@ -164,12 +171,13 @@ export async function autoConfigureGateways(
         try {
           const result = await sendGatewayPrompt(
             provider,
-            "Reply with the single word READY.",
+            provider === "kilo" ? KILO_CODING_PROBE : "Reply with the single word READY.",
             probeConfig,
-            { signal: timeout(20_000), maxTokens: 1024, firstAnswerTimeoutMs: 5_000 },
+            { signal: timeout(20_000), maxTokens: 1024, firstAnswerTimeoutMs: 5_000, ...(provider === "kilo" ? { validateResponse: validateKiloCodingProbe } : {}) },
           );
           signal.throwIfAborted();
-          const detail = `Verified ${result.model}. Ready for real prompts.`;
+          if (provider === "kilo") validateKiloCodingProbe(result.text);
+          const detail = provider === "kilo" ? `Verified coding actions via ${result.model}. Ready for coding goals.` : `Verified ${result.model}. Ready for real prompts.`;
           emit({ provider, phase: "ready", detail });
           return {
             provider,

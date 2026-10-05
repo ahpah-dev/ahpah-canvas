@@ -29,5 +29,7 @@ export const sendEngineeringStep: AgentSender = async (request) => {
     maxTokens: 8192,
     providerId: custom ? request.providerId.slice("custom:".length) : undefined,
     onProgress: request.onProgress,
+    routing: request.routing,
+    validateResponse: request.validateResponse,
   });
 };

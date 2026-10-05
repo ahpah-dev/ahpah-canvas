@@ -546,7 +546,7 @@ export function App() {
       const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-16).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 9000)}`).join('\n');
       const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal,
         context: `Conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${memory.map(item => `${item.key}: ${item.value}`).join('\n')}`,
-        send: request => card.agentType === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress }),
+        send: request => card.agentType === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress, routing: request.routing, validateResponse: request.validateResponse }),
         syncFiles: async (files, runSignal) => {
           controller.signal.throwIfAborted();
           if (!active()) throw new Error('This Canvas run was replaced before saving.');

@@ -4,6 +4,8 @@ import { clearKiloRouteHealth, verifiedFreeFallbacks, fastReasoning, markKiloRou
 import { sendGatewayPrompt } from "../src/utils/gateways.ts";
 import { GatewayServiceError } from "../src/utils/gatewayErrors.ts";
 import { AUTO_FREE_FIRST_ANSWER_MS } from "../src/utils/gatewayPolicy.ts";
+import { parseAgentActions, runEngineeringAgent } from '../src/utils/agentRuntime.ts';
+import { createStarterProject } from '../src/utils/projectFiles.ts';
 beforeEach(clearKiloRouteHealth);
 const config = { omniRouteUrl: "http://localhost:20128/v1", omniRouteKey: "", omniRouteModel: "chosen", kiloKey: "", kiloModel: "kilo-auto/free" };
 const free = (id: string, created = 1) => ({ id, created, isFree: true, pricing: { prompt: "0", completion: "0" } });
@@ -178,4 +180,61 @@ test("manually selected models do not receive automatic reasoning overrides or f
   });
   await assert.rejects(sendGatewayPrompt("kilo", "Hello", { ...config, kiloModel: "openai/gpt-6-luna" }), /Unavailable/);
   assert.equal(calls, 1);
+});
+
+test('Kilo coding runs pin a verified free route and recover a repeated inspection loop', async (t) => {
+  const models: string[] = [];
+  let saves = 0;
+  const repeated = [{ tool: 'plan', steps: ['Inspect', 'Implement', 'Review'] }, { tool: 'read_file', path: 'app.js' }];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return catalog();
+    const payload = JSON.parse(init.body as string);
+    models.push(payload.model);
+    if (payload.model === 'older/free') {
+      assert.match(payload.messages.at(-1).content, /Actual run state/);
+      assert.match(payload.messages.at(-1).content, /previous route repeated/);
+    }
+    const actions = payload.model === 'older/free'
+      ? [{ tool: 'write_file', path: 'app.js', content: 'const value = 2;' }, { tool: 'read_file', path: 'app.js' }, { tool: 'finish', summary: 'Updated value', review: 'Reviewed source. Tests not run.' }]
+      : repeated;
+    return json({ model: payload.model === 'kilo-auto/free' ? 'current/free' : payload.model, choices: [{ message: { content: JSON.stringify({ actions }) } }] });
+  });
+  const result = await runEngineeringAgent({
+    project: { ...createStarterProject(), files: [{ path: 'app.js', content: 'const value = 1;' }] },
+    goal: 'Change value to 2', providerId: 'kilo', signal: new AbortController().signal, mode: 'canvas',
+    send: request => sendGatewayPrompt('kilo', request.prompt, config, request),
+    syncFiles: async () => { saves++; return { saved: true, destination: 'folder/app.js' }; },
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(models, ['kilo-auto/free', 'current/free', 'current/free', 'older/free']);
+  assert.equal(result.changeSet.changes[0].after, 'const value = 2;');
+  assert.equal(saves, 1);
+  assert.ok(result.activities.some(activity => activity.title === 'Recovering a repeating Kilo route'));
+  assert.equal(config.kiloModel, 'kilo-auto/free');
+});
+
+test('malformed complete coding replies switch free routes with identical conversation context', async (t) => {
+  const requests: { model: string; messages: unknown[] }[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return catalog();
+    const payload = JSON.parse(init.body as string); requests.push(payload);
+    return json({ model: payload.model, choices: [{ message: { content: payload.model === 'kilo-auto/free' ? 'I have created your app.' : JSON.stringify({ actions: [{ tool: 'finish', summary: 'Ready', review: 'No files changed.' }] }) } }] });
+  });
+  const result = await sendGatewayPrompt('kilo', 'Next coding step', config, { messages: [{ role: 'system', content: 'Use documented coding actions.' }], validateResponse: parseAgentActions });
+  assert.deepEqual(requests.map(item => item.model), ['kilo-auto/free', 'current/free']);
+  assert.deepEqual(requests[0].messages, requests[1].messages);
+  assert.equal(result.model, 'current/free');
+});
+
+test('manual Kilo coding routes are not silently replaced when they repeat', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    assert.equal(JSON.parse(init.body as string).model, 'chosen-model'); calls++;
+    return json({ model: 'chosen-model', choices: [{ message: { content: JSON.stringify({ actions: [{ tool: 'list_files' }] }) } }] });
+  });
+  const result = await runEngineeringAgent({ project: createStarterProject(), goal: 'Inspect files', providerId: 'kilo', signal: new AbortController().signal, send: request => sendGatewayPrompt('kilo', request.prompt, { ...config, kiloModel: 'chosen-model' }, request) });
+  assert.equal(calls, 3);
+  assert.match(result.error!, /repeated actions/);
+  assert.equal(result.activities.some(activity => activity.title === 'Recovering a repeating Kilo route'), false);
 });
