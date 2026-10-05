@@ -30,6 +30,7 @@ import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
 import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
+import { sendCodexPrompt } from "./utils/codexConnection";
 import { conversationHtml, htmlExportRequest, htmlTitle, projectHtmlArtifact, refusesHtmlSave } from './utils/htmlExport';
 import type { HtmlArtifact } from './utils/htmlExport';
 import { autoSaveHtmlToFolder, autoSaveFilesToFolder } from './utils/connectedFolder';
@@ -527,10 +528,10 @@ export function App() {
         complete({ status: 'idle', lastAction: 'Demo response · no gateway contacted' });
         return;
       }
-      if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
+      if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
       const gatewayConfig = loadGatewayConfig();
       const provider = card.agentType === 'custom' ? 'custom' : card.agentType === 'kilo' ? 'kilo' : 'omniroute';
-      const providerId = provider === 'custom' ? `custom:${card.providerId}` : provider;
+      const providerId = card.agentType === 'codex' ? 'codex' : provider === 'custom' ? `custom:${card.providerId}` : provider;
       let project = loadCanvasProject(cardId);
       if (!project) {
         try { const oldHtml = conversationHtml(card.history); project = projectForCanvas(cardId, [{ path: oldHtml.filename, content: oldHtml.html }]); }
@@ -539,7 +540,7 @@ export function App() {
       const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-16).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 9000)}`).join('\n');
       const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal,
         context: `Conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${memory.map(item => `${item.key}: ${item.value}`).join('\n')}`,
-        send: request => sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress }),
+        send: request => card.agentType === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress }),
         syncFiles: async (files, runSignal) => {
           controller.signal.throwIfAborted();
           if (!active()) throw new Error('This Canvas run was replaced before saving.');
@@ -688,6 +689,8 @@ export function App() {
         type === "agent"
           ? target === "kilo"
             ? "kilo"
+            : target === "codex"
+              ? "codex"
             : "omniroute"
           : undefined,
       );
@@ -916,6 +919,13 @@ export function App() {
       />
 
       <SettingsModal
+        onConnectCodex={() => {
+          const id = cardsRef.current.find(card => card.type === "agent" && card.agentType === "codex")?.id || handleAddCard("agent", "codex");
+          setIsSimulated(false);
+          setCurrentView("canvas");
+          setIsSettingsOpen(false);
+          focusCard(id);
+        }}
         onAddCustomProvider={(providerId) => {
           const id = handleAddCard("agent", "custom", undefined, providerId);
           setIsSimulated(false);

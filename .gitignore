@@ -24,6 +24,7 @@ artifacts/
 .codex/
 .agents/
 .ahpah-projects/
+.ahpah-tools/
 
 # Editor directories and files
 .vscode/*

@@ -46,7 +46,15 @@ npm run build
 npm run preview
 ```
 
-Start OmniRoute or another local model server separately; the app does not install or launch provider services.
+Start OmniRoute or another local model server separately.
+
+### Connect Codex with your ChatGPT plan
+
+Open **Settings → Connections & auto setup → Connect with ChatGPT** in the local app. It detects an installed Codex CLI (including the Windows Codex app), or installs the official `@openai/codex` package in the ignored `.ahpah-tools` folder. An existing ChatGPT sign-in is reused; otherwise complete OpenAI's sign-in in the tab it opens. The connection is detected automatically after sign-in. No API key or credential file is copied into the browser.
+
+The model picker loads Codex's current catalog and selects its reported default. Choose a model, then **Use Codex in Canvas** to add/focus a coding card and leave demo mode. Codex is also available in the Code provider picker. Your ChatGPT plan's eligibility, model access, and shared usage limits apply. Catalog visibility is not proof of model entitlement.
+
+The local bridge uses official Codex app-server authentication and `codex exec` for model turns. Native shell/app tools are disabled, user configuration is ignored for generation, and requests use read-only, ephemeral sessions in an empty temporary folder. AhPah's validated project tools perform edits and retain its normal review/command approval flow. An older CLI that cannot support these flags needs to be updated. The GitHub Pages site cannot execute Codex on your PC; launch **Start AhPah.bat** to use this connection.
 
 ## Build a project
 

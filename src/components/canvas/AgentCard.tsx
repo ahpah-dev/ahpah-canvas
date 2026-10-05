@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { CanvasCard, TerminalLine } from "../../types/canvas";
 import { loadGatewayConfig, supportsLocalBridge } from "../../utils/gateways";
+import { codexModel } from "../../utils/codexConnection";
 import { cardName, isBusy, statusName } from "../../utils/cardPresentation";
 import { hasSameCardContent } from "../../utils/cardRendering";
 import { isNearScrollBottom } from "../../utils/interactionScheduling";
@@ -171,8 +172,8 @@ function AgentCardBody({
   const config = useMemo(() => loadGatewayConfig(), [providerConfigRevision]);
   const custom = card.agentType === "custom" ? config.customProviders?.find((provider) => provider.id === card.providerId) : undefined;
   const name = custom?.name || cardName(card);
-  const providerName = custom?.name || (card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
-  const configuredModel = card.agentType === "custom" ? custom?.model || "" : kilo ? config.kiloModel : config.omniRouteModel;
+  const providerName = custom?.name || (card.agentType === "codex" ? "Codex · ChatGPT" : card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
+  const configuredModel = card.agentType === "codex" ? codexModel() : card.agentType === "custom" ? custom?.model || "" : kilo ? config.kiloModel : config.omniRouteModel;
   const model = configuredModel;
   const lastResponseModel =
     card.modelSource === "live" ? card.routedModel : undefined;

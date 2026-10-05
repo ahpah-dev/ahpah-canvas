@@ -96,13 +96,13 @@ export const AGENT_REGISTRY: Record<AgentType, AgentDefinition> = {
   },
   codex: {
     type: 'codex',
-    name: 'Codex CLI',
+    name: 'Codex',
     command: 'codex',
-    badge: 'Demo card',
+    badge: 'ChatGPT plan',
     color: '#10b981',
     borderColor: 'border-emerald-500/40',
     bgGlow: 'shadow-[0_0_20px_rgba(16,185,129,0.15)]',
-    description: 'A sample Codex card for demo mode. Connect an API provider to send live prompts.',
+    description: 'A coding agent powered by your local Codex ChatGPT sign-in. Connect in Settings to use live models.',
     defaultRole: 'Test & Verification Specialist',
     quickPrompts: [
       'Generate end-to-end Vitest suite for checkout flow',

@@ -29,6 +29,7 @@ import {
   type GatewayTransport,
 } from "../../utils/gateways";
 import { CustomProvidersPanel } from "./CustomProvidersPanel";
+import { CodexConnectionPanel } from "./CodexConnectionPanel";
 import { useDialogFocus } from "../../utils/useDialogFocus";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import {
@@ -49,6 +50,7 @@ interface SettingsModalProps {
   onToggleSimulated: (val: boolean) => void;
   onAutoConfigured: (providers: ("omniroute" | "kilo")[]) => void;
   onAddCustomProvider: (providerId: string) => void;
+  onConnectCodex: () => void;
 }
 
 type ConnectionState = "idle" | "checking" | "connected" | "verified" | "error";
@@ -101,6 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleSimulated,
   onAutoConfigured,
   onAddCustomProvider,
+  onConnectCodex,
 }) => {
   useDialogFocus(isOpen, onClose);
   const present = useDialogPresence(isOpen);
@@ -438,6 +441,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onChange={() => setSaved(false)}
             className="cw-settings-body space-y-5 overflow-y-auto p-5 sm:p-8"
           >
+            <CodexConnectionPanel onConnected={onConnectCodex} />
             <section className="cw-auto-setup">
               <div className="cw-auto-heading">
                 <span className="cw-icon-tile">

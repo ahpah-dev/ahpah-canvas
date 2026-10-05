@@ -1,9 +1,11 @@
 import type { AgentSender, EngineeringProvider } from "../types/engineering.ts";
 import { loadGatewayConfig, sendGatewayPrompt, supportsLocalBridge, type GatewayConfig } from "./gateways.ts";
+import { codexModel, sendCodexPrompt } from "./codexConnection.ts";
 
 /** Coding uses the user's current provider configuration and the same live routes as canvas cards. */
 export function engineeringProviders(config: GatewayConfig): EngineeringProvider[] {
   const providers: EngineeringProvider[] = [];
+  if (supportsLocalBridge() && codexModel()) providers.push({ id: "codex", label: "Codex · ChatGPT", model: codexModel() });
   if (supportsLocalBridge() && config.kiloModel.trim())
     providers.push({ id: "kilo", label: config.kiloModel === "kilo-auto/free" ? "Kilo Auto Free" : "Kilo Gateway", model: config.kiloModel });
   if (config.omniRouteModel.trim())
@@ -16,6 +18,7 @@ export function engineeringProviders(config: GatewayConfig): EngineeringProvider
 }
 
 export const sendEngineeringStep: AgentSender = async (request) => {
+  if (request.providerId === "codex") return sendCodexPrompt(request.prompt, request);
   const config = loadGatewayConfig();
   const custom = request.providerId.startsWith("custom:");
   if (!custom && !["kilo", "omniroute"].includes(request.providerId))
