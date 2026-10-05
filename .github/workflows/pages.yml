@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Hosted runner pool to use for a manual deployment'
+        type: choice
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - windows-latest
 
 permissions:
   contents: read
@@ -13,14 +21,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  publish:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 15
     permissions:
       contents: read
-      pages: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -28,31 +43,46 @@ jobs:
           cache: npm
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
-      - name: Install dependencies
-        run: npm ci
-      - name: Run regression tests
-        run: npm run test
-      - name: Check source
-        run: npm run lint
-      - name: Build static site
-        run: npm run build
+      - name: Check and build site on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          npm ci
+          npm run test
+          npm run lint
+          npm run build
         env:
           VITE_GATEWAY_TRANSPORT: direct
+      - name: Check and build site on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          VITE_GATEWAY_TRANSPORT: direct
+      - name: Archive site on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: tar --dereference --hard-dereference -C dist -cf "$RUNNER_TEMP/artifact.tar" .
+      - name: Archive site on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: tar.exe -cf "$env:RUNNER_TEMP/artifact.tar" -C dist .
       - name: Upload site
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
