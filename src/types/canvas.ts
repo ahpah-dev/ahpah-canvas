@@ -19,7 +19,7 @@ export type AgentType =
 export interface TerminalLine {
   id: string;
   text: string;
-  type: 'input' | 'output' | 'system' | 'error' | 'success' | 'plan' | 'diff' | 'route';
+  type: 'input' | 'output' | 'system' | 'error' | 'success' | 'plan' | 'diff' | 'route' | 'tool';
   timestamp: string;
 }
 
@@ -52,6 +52,7 @@ export interface CanvasCard {
   modelSource?: 'live';
   legacyMigrated?: boolean;
   compressionSavedPercent?: number;
+  pendingCommands?: string[];
 }
 
 export interface MemoryItem {

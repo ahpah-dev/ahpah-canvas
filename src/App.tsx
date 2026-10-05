@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import {
   CanvasCard,
   Connection,
@@ -25,15 +25,17 @@ import { SettingsModal } from "./components/canvas/SettingsModal";
 import { OneClickSetupModal } from "./components/canvas/OneClickSetupModal";
 import { VoiceBar } from "./components/canvas/VoiceBar";
 import { loadGatewayConfig, sendGatewayPrompt, supportsLocalBridge } from "./utils/gateways";
-import { COMPLETION_TIMEOUT_MESSAGE } from "./utils/gatewayPolicy";
 import { validateCards, validateWorkspace } from "./utils/workspaceValidation";
 import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
 import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
-import { conversationHtml, htmlExportRequest, requestsHtmlExport, requestsHtmlCreation, refusesHtmlSave } from './utils/htmlExport';
+import { conversationHtml, htmlExportRequest, htmlTitle, projectHtmlArtifact, refusesHtmlSave } from './utils/htmlExport';
 import type { HtmlArtifact } from './utils/htmlExport';
-import { autoSaveHtmlToFolder } from './utils/connectedFolder';
+import { autoSaveHtmlToFolder, autoSaveFilesToFolder } from './utils/connectedFolder';
+import { loadCanvasProject, projectForCanvas, runCanvasAgent, saveCanvasProject } from './utils/canvasAgentRuntime';
+import type { EngineeringProject } from './types/engineering';
+import { validateEngineeringProject, projectByteSize } from './utils/projectFiles';
 
 const CodingWorkspace = React.lazy(() => import("./components/engineering/CodingWorkspace").then((module) => ({ default: module.CodingWorkspace })));
 
@@ -120,6 +122,8 @@ export function App() {
     const saved = readSavedValue("ahpah_view");
     return saved === "canvas" || saved === "code" ? saved : "site";
   });
+  const [canvasCardToOpen, setCanvasCardToOpen] = useState<string>();
+  const [canvasProjectToOpen, setCanvasProjectToOpen] = useState<EngineeringProject | undefined>();
   const [cards, setCards] = useState<CanvasCard[]>(() => {
     const saved = readSavedValue("ahpah_cards_v3");
     if (saved) {
@@ -464,238 +468,111 @@ export function App() {
     return newId;
   };
 
-  // One in-flight request per card. Completion belongs to its original request only.
+  const syncCanvasEditor = useCallback(async (project: EngineeringProject, signal: AbortSignal) => {
+    if (!canvasCardToOpen || project.id !== canvasProjectToOpen?.id) return '';
+    signal.throwIfAborted();
+    saveCanvasProject(canvasCardToOpen, project);
+    if (!project.files.length) return 'Canvas source updated. Existing PC files are retained.';
+    const saved = await autoSaveFilesToFolder(project.files.map(file => ({ ...file, path: `canvas/${project.id}/${file.path}` })), undefined, signal);
+    return saved.saved ? `Saved automatically to your PC: ${saved.destinations.join(', ')}.` : saved.reason;
+  }, [canvasCardToOpen, canvasProjectToOpen?.id]);
+
+  // One run per card, with actual app tools and isolated project files.
   const handleExecutePrompt = (cardId: string, rawPrompt: string) => {
     const prompt = rawPrompt.trim();
-    const card = cardsRef.current.find((item) => item.id === cardId);
-    if (
-      !prompt ||
-      !card ||
-      card.type !== "agent" ||
-      requests.current.has(cardId)
-    )
-      return;
+    const card = cardsRef.current.find(item => item.id === cardId);
+    if (!prompt || !card || card.type !== 'agent' || requests.current.has(cardId)) return;
     const controller = new AbortController();
     requests.current.set(cardId, controller);
-    const timestamp = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const input = {
-      id: crypto.randomUUID(),
-      text: prompt,
-      type: "input" as const,
-      timestamp,
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const input = { id: crypto.randomUUID(), text: prompt, type: 'input' as const, timestamp };
+    const append = (text: string, type: CanvasCard['history'][number]['type'] = 'system', id: string = crypto.randomUUID()) => {
+      setCards(previous => previous.map(item => item.id === cardId ? { ...item,
+        history: [...item.history.filter(line => line.id !== id), { id, text, type, timestamp }],
+      } : item));
     };
-    const outputId = crypto.randomUUID();
-    let partialAnswer = "";
-    let generatedTokens = 0;
-    const savedAfterConnection = (destination: string) => {
-      const message = `Saved automatically to your PC: ${destination}.`;
-      setCards(previous => previous.map(item => item.id === cardId ? { ...item, ...(item.status === 'idle' ? { lastAction: message } : {}), history: [...item.history, { id: crypto.randomUUID(), type: 'system', text: message, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }] } : item));
-    };
-    setCards((previous) =>
-      previous.map((item) =>
-        item.id === cardId
-          ? {
-              ...item,
-              status: "thinking",
-              cpuPercent: 0,
-              lastAction: "Waiting for gateway response",
-              history: [...item.history, input],
-            }
-          : item,
-      ),
-    );
+    const savedAfterConnection = (destination: string) => append(`Saved automatically to your PC: ${destination}.`);
+    setCards(previous => previous.map(item => item.id === cardId ? { ...item, status: 'thinking', lastAction: 'Planning with file tools', history: [...item.history, input] } : item));
     setSelectedCardId(cardId);
     const complete = (update: Partial<CanvasCard>) => {
       if (requests.current.get(cardId) !== controller) return;
       requests.current.delete(cardId);
-      setCards((previous) =>
-        previous.map((item) =>
-          item.id === cardId ? { ...item, ...update } : item,
-        ),
-      );
+      setCards(previous => previous.map(item => item.id === cardId ? { ...item, ...update } : item));
     };
+    const active = () => !controller.signal.aborted && requests.current.get(cardId) === controller;
     const run = async () => {
       const exportRequest = htmlExportRequest(prompt);
-      const followsHtmlGoal = /^(?:ok(?:ay)?[,!. ]*)?(?:do it|go ahead|continue|finish it|make it|yes|sure)[.! ]*$/i.test(prompt) && card.history.some(line => line.type === 'input' && (requestsHtmlCreation(line.text) || requestsHtmlExport(line.text)));
-      const requiresHtml = Boolean(exportRequest) || requestsHtmlExport(prompt) || requestsHtmlCreation(prompt) || followsHtmlGoal;
-      let missingSource = false;
       if (exportRequest) {
         let artifact: HtmlArtifact | undefined;
-        try { artifact = conversationHtml(card.history, exportRequest.name); } catch { missingSource = true; }
+        const project = loadCanvasProject(cardId);
+        if (project) {
+          const entry = project.files.find(file => /\.html?$/i.test(file.path) && (!exportRequest.name || htmlTitle(file.content).toLowerCase() === exportRequest.name.toLowerCase() || file.path.split('/').pop()?.replace(/\.html?$/i, '').toLowerCase() === exportRequest.name.toLowerCase()))?.path;
+          if (entry) { try { artifact = projectHtmlArtifact(project.files, entry, exportRequest.name); } catch { /* Recover missing resources using real tools below. */ } }
+        }
+        if (!artifact) { try { artifact = conversationHtml(card.history, exportRequest.name); } catch { /* The agent will implement missing source. */ } }
         if (artifact) {
-          let message: string;
-          try {
-            const result = await autoSaveHtmlToFolder(artifact, savedAfterConnection);
-            message = result.saved ? `Saved automatically to your PC: ${result.destination}.` : `${artifact.filename} is ready. ${result.reason}`;
-          } catch (error) { message = error instanceof Error ? error.message : 'Could not save the HTML file to your PC.'; }
-          complete({ status: 'idle', lastAction: message, history: [...card.history, input, { id: outputId, text: message, type: 'system', timestamp }] });
+          const saved = await autoSaveHtmlToFolder(artifact, savedAfterConnection, controller.signal);
+          if (!active()) return;
+          const message = saved.saved ? `Saved automatically to your PC: ${saved.destination}.` : `${artifact.filename} is ready. ${saved.reason}`;
+          append(message);
+          complete({ status: 'idle', lastAction: message });
           return;
         }
       }
       if (isSimulated) {
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
-        if (requests.current.get(cardId) !== controller) return;
-        const result = generateSimulationResponse(
-          card.agentType || "omniroute",
-          prompt,
-          card.title,
-        );
-        complete({
-          status: "idle",
-          lastAction: "Demo response · no gateway contacted",
-          history: [
-            ...card.history,
-            input,
-            ...result.lines.map((line) => ({ ...line, timestamp })),
-          ],
-        });
+        await new Promise(resolve => window.setTimeout(resolve, 450));
+        if (!active()) return;
+        const result = generateSimulationResponse(card.agentType || 'omniroute', prompt, card.title);
+        for (const line of result.lines) append(line.text, line.type);
+        complete({ status: 'idle', lastAction: 'Demo response · no gateway contacted' });
         return;
       }
-      if (
-        !["omniroute", "kilo", "deepseek", "qwen", "custom"].includes(
-          card.agentType || "",
-        )
-      )
-        throw new Error(
-          "This browser workspace has no local CLI bridge. Add a gateway or custom API card to send a real request.",
-        );
-      const history = card.history
-        .filter(
-          (line) =>
-            line.type === "output" ||
-            (line.type === "input" && !line.id.startsWith("init-")),
-        )
-        .map((line) => ({
-          role:
-            line.type === "input" ? ("user" as const) : ("assistant" as const),
-          content: line.text.replace(/^›\s*/, ""),
-        }));
-      const context = memory.length
-        ? [
-            {
-              role: "system" as const,
-              content:
-                "Project context:\n" +
-                memory.map((item) => `${item.key}: ${item.value}`).join("\n"),
-            },
-          ]
-        : [];
-      const instructions = { role: 'system' as const, content: 'You are an implementation agent in Canvas. When asked to create a browser game or page, return its ACTUAL COMPLETE SOURCE in one fenced html document, with embedded CSS and JavaScript and a closing </html>. Implement the requested functionality, not a description of a supposedly created file. You have no independent file-writing tool. Canvas automatically writes complete HTML to the connected PC folder after the response finishes. NEVER instruct the user to click Save to Folder or claim a file was saved before an actual app result. No fictitious artifacts, buttons, file links, or tools. Keep the implementation compact enough to return in full. External HTTPS libraries such as Three.js are allowed; include their real loading code.' };
-      const requestPrompt = missingSource ? `${prompt}\nActual app check: the conversation has no usable complete HTML source for this game. Generate the missing complete game file now from the user's specifications in this conversation. Return the source, not another creation claim. Canvas will save it automatically. Do not claim that an earlier file was recovered.` : prompt;
-      const baseMessages = [instructions, ...context, ...history];
+      if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
       const gatewayConfig = loadGatewayConfig();
-      let recoveryAttempt = 0;
-      const receive = (request: string, messages = baseMessages) => sendGatewayPrompt(
-        card.agentType === "custom" ? "custom" : card.agentType === "kilo" ? "kilo" : "omniroute",
-        request,
-        gatewayConfig,
-        {
-          signal: controller.signal,
-          providerId: card.providerId,
-          maxTokens: requiresHtml ? 8192 : undefined,
-          messages,
-          onProgress: ({ text, phase, detail }) => {
-            if (
-              controller.signal.aborted ||
-              requests.current.get(cardId) !== controller
-            ) return;
-            partialAnswer = text;
-            const lastAction = detail || (phase === "answer"
-              ? "Receiving answer"
-              : phase === "reasoning"
-                ? "Kilo is reasoning"
-                : phase === "retrying"
-                  ? "Recovering an empty free response"
-                  : "Waiting for gateway response");
-            setCards((previous) => previous.map((item) =>
-              item.id === cardId ? {
-                ...item,
-                status: phase === "answer" ? "working" : "thinking",
-                lastAction: recoveryAttempt ? `Completing HTML · recovery ${recoveryAttempt}/2 · ${lastAction}` : lastAction,
-                history: [
-                  ...item.history.filter((line) => line.id !== outputId),
-                  ...(text ? [{ id: outputId, text, type: "output" as const, timestamp }] : []),
-                ],
-              } : item,
-            ));
-          },
+      const provider = card.agentType === 'custom' ? 'custom' : card.agentType === 'kilo' ? 'kilo' : 'omniroute';
+      const providerId = provider === 'custom' ? `custom:${card.providerId}` : provider;
+      let project = loadCanvasProject(cardId);
+      if (!project) {
+        try { const oldHtml = conversationHtml(card.history); project = projectForCanvas(cardId, [{ path: oldHtml.filename, content: oldHtml.html }]); }
+        catch { project = projectForCanvas(cardId); }
+      }
+      const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-16).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 9000)}`).join('\n');
+      const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal,
+        context: `Conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${memory.map(item => `${item.key}: ${item.value}`).join('\n')}`,
+        send: request => sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress }),
+        syncFiles: async (files, runSignal) => {
+          controller.signal.throwIfAborted();
+          if (!active()) throw new Error('This Canvas run was replaced before saving.');
+          const saved = await autoSaveFilesToFolder(files.map(file => ({ ...file, path: `canvas/${project!.id}/${file.path}` })), destinations => savedAfterConnection(destinations.join(', ')), runSignal);
+          return saved.saved ? { saved: true, destination: saved.destinations.join(', ') } : saved;
         },
-      ).then(answer => { generatedTokens += answer.tokens; return answer; });
-      let result = await receive(requestPrompt);
-      if (controller.signal.aborted || requests.current.get(cardId) !== controller) return;
-      let artifact: HtmlArtifact | undefined;
-      let artifactError = '';
-      let previousPrompt = requestPrompt;
-      for (let attempt = 0; attempt <= 2; attempt++) {
-        try { artifact = conversationHtml([{ type: 'input', text: prompt }, { type: 'output', text: result.text }], exportRequest?.name); artifactError = ''; break; }
-        catch (error) { artifactError = error instanceof Error ? error.message : 'No usable HTML source was supplied.'; }
-        if (!requiresHtml || attempt === 2) break;
-        recoveryAttempt = attempt + 1;
-        setCards(previous => previous.map(item => item.id === cardId ? { ...item, lastAction: `Generating the missing complete HTML source · recovery ${attempt + 1}/2` } : item));
-        const recoveryMessages = [...baseMessages, { role: 'user' as const, content: requestPrompt }, { role: 'assistant' as const, content: result.text.slice(0, 32000) }];
-        previousPrompt = `Actual app validation failed: ${artifactError}\nOriginal goal: ${prompt}\nReturn ONE complete playable HTML document with a real implementation, title, embedded CSS and JavaScript, and </html>. Include every required local asset inline. If your previous response only described a game, implement the game now using the conversation specifications. If it was truncated, return a smaller COMPLETE working version. No summaries, save instructions, placeholders, or claims. The app saves the validated file automatically.`;
-        result = await receive(previousPrompt, recoveryMessages);
-        if (controller.signal.aborted || requests.current.get(cardId) !== controller) return;
-      }
-      let saveMessage = '';
-      let saveFailed = false;
-      if (artifact && !refusesHtmlSave(prompt)) {
-        try {
-          const saved = await autoSaveHtmlToFolder(artifact, savedAfterConnection);
-          saveMessage = saved.saved ? `${missingSource ? 'Generated the missing HTML source from the conversation. ' : ''}Saved automatically to your PC: ${saved.destination}.` : `${artifact.filename} is complete and ready. ${saved.reason} No Save button is needed.`;
-        } catch (error) { saveFailed = true; saveMessage = error instanceof Error ? error.message : 'The generated HTML could not be saved to your PC.'; }
-      } else if (requiresHtml && !artifact) {
-        saveFailed = true; saveMessage = `The model did not produce a complete HTML file after automatic recovery. Nothing was saved. ${artifactError} Try a smaller game or another model; your conversation has been kept.`;
-      }
-      complete({
-        status: saveFailed ? 'error' : 'idle',
-        history: [
-          ...card.history,
-          input,
-          {
-            id: outputId,
-            text: result.text,
-            type: "output",
-            timestamp: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
-          ...(saveMessage ? [{ id: crypto.randomUUID(), text: saveMessage, type: saveFailed ? 'error' as const : 'system' as const, timestamp }] : []),
-        ],
-        tokensUsed: card.tokensUsed + generatedTokens,
-        cpuPercent: 0,
-        routedModel: result.model,
-        modelSource: "live",
-        lastAction: saveMessage || `Response from ${result.model}`,
+        exportHtml: async (artifact, runSignal) => {
+          controller.signal.throwIfAborted();
+          const saved = await autoSaveHtmlToFolder(artifact, savedAfterConnection, runSignal);
+          return saved.saved ? { saved: true, destination: saved.destination } : saved;
+        },
+        onEvent: event => {
+          if (!active()) return;
+          if (event.activity) append(`${event.activity.title}\n${event.activity.detail}`, event.activity.kind === 'error' ? 'error' : event.activity.kind === 'tool' ? 'tool' : 'system', event.activity.id);
+          setCards(previous => previous.map(item => item.id === cardId ? { ...item,
+            ...(event.detail ? { lastAction: event.detail } : {}),
+            ...(event.model ? { routedModel: event.model, modelSource: 'live' as const } : {}),
+            ...(event.tokens !== undefined ? { tokensUsed: card.tokensUsed + event.tokens } : {}),
+            status: event.phase === 'planning' ? 'thinking' : 'working',
+          } : item));
+        },
       });
+      if (!active()) return;
+      append(result.changeSet.summary + (result.changeSet.review ? `\n\n${result.changeSet.review}` : ''), 'output');
+      if (result.error) append(result.error, 'error');
+      if (result.changeSet.commands.length) append(`Commands need your approval in Code: ${result.changeSet.commands.join('; ')}. Open this project's files in Code to review and run them.`, 'system');
+      complete({ status: result.error ? 'error' : 'idle', tokensUsed: card.tokensUsed + result.changeSet.tokens, cpuPercent: 0,
+        pendingCommands: result.changeSet.commands, routedModel: result.changeSet.model, modelSource: 'live', lastAction: result.error || (result.folderSave ? result.folderSave.saved ? `Saved automatically: ${result.folderSave.destination}` : result.folderSave.reason || 'Source ready · connect a folder to save' : refusesHtmlSave(prompt) ? 'Implementation complete · saving disabled for this request' : 'Agent run complete · source retained in Canvas') });
     };
-    void run().catch((error) => {
-      complete({
-        status: "error",
-        tokensUsed: card.tokensUsed + generatedTokens,
-        cpuPercent: 0,
-        lastAction: "Gateway request failed",
-        history: [
-          ...card.history,
-          input,
-          ...(partialAnswer ? [{ id: outputId, text: partialAnswer, type: "output" as const, timestamp }] : []),
-          {
-            id: crypto.randomUUID(),
-            text:
-              error instanceof Error
-                ? error.name === "TimeoutError"
-                  ? COMPLETION_TIMEOUT_MESSAGE
-                  : error.message
-                : "Gateway request failed.",
-            type: "error",
-            timestamp,
-          },
-        ],
-      });
+    void run().catch(error => {
+      if (!active()) return;
+      append(error instanceof Error ? error.message : 'The coding run failed.', 'error');
+      complete({ status: 'error', lastAction: 'Coding run needs attention', cpuPercent: 0 });
     });
   };
 
@@ -846,6 +723,7 @@ export function App() {
       project: "AhPah Canvas Workspace",
       version: "1.0.0",
       exportedAt: new Date().toISOString(),
+      canvasProjects: Object.fromEntries(cards.flatMap(card => { const project = loadCanvasProject(card.id); return project ? [[card.id, project]] : []; })),
       cards,
       connections,
       memory,
@@ -866,8 +744,22 @@ export function App() {
 
   const handleImportWorkspace = (jsonString: string) => {
     try {
-      const parsed = validateWorkspace(JSON.parse(jsonString));
+      const document = JSON.parse(jsonString);
+      const parsed = validateWorkspace(document);
+      const projects: [string, EngineeringProject][] = [];
+      let sourceBytes = 0;
+      if (document.canvasProjects !== undefined) {
+        if (!document.canvasProjects || typeof document.canvasProjects !== 'object' || Array.isArray(document.canvasProjects)) throw new Error('Invalid Canvas source project collection.');
+        for (const [cardId, value] of Object.entries(document.canvasProjects)) {
+          if (!parsed.cards.some(card => card.id === cardId && card.type === 'agent')) throw new Error('Canvas source must belong to an agent in this workspace.');
+          const project = validateEngineeringProject(value);
+          sourceBytes += projectByteSize(project.files);
+          if (sourceBytes > 20 * 1024 * 1024) throw new Error('This workspace exceeds the 20 MB Canvas source import limit. Import smaller workspaces.');
+          projects.push([cardId, project]);
+        }
+      }
       stopAllRequests();
+      for (const [cardId, project] of projects) saveCanvasProject(cardId, project);
       setCards(
         parsed.cards.map((card) =>
           card.status === "thinking" || card.status === "working"
@@ -930,7 +822,10 @@ export function App() {
         ) : currentView === "code" ? (
           <React.Suspense fallback={<div className="cw-tool-empty" role="status"><h2>Opening your coding workspace…</h2></div>}>
             <CodingWorkspace
-              key="engineering-workspace"
+              key={canvasProjectToOpen?.id || "engineering-workspace"}
+              canvasProject={canvasProjectToOpen}
+              canvasCommands={cards.find(card => card.id === canvasCardToOpen)?.pendingCommands}
+              onCanvasProjectChange={syncCanvasEditor}
               send={sendEngineeringStep}
               providers={codingProviders}
               localExecution={supportsLocalBridge()}
@@ -968,7 +863,7 @@ export function App() {
                 onSpawnWorker={handleSpawnWorker}
                 onStopPrompt={handleStopPrompt}
                 onOpenSettings={() => setIsSettingsOpen(true)}
-                onOpenCode={() => setCurrentView("code")}
+                onOpenCode={cardId => { setCanvasCardToOpen(cardId); setCanvasProjectToOpen(cardId ? loadCanvasProject(cardId) ?? undefined : undefined); setCurrentView("code"); }}
                 isSimulated={isSimulated}
               />
               <VoiceBar

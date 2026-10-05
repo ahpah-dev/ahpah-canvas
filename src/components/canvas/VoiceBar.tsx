@@ -174,7 +174,7 @@ export function VoiceBar({
               ? "Listening… review your words before sending"
               : busy
                 ? "Agent is responding…"
-                : "Plan a change, review code, or investigate a bug…"
+                : "Build a project, edit files, or fix a bug…"
           }
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -209,7 +209,7 @@ export function VoiceBar({
             ? "Listening · review before sending"
             : busy
               ? "Your agent is responding"
-              : "Discuss here · edit project files in Code"}
+              : "Real file tools · automatic saves to your folder"}
         </span>
         <span>
           Enter to send <kbd>↵</kbd>

@@ -9,7 +9,7 @@ import { htmlExportRequest, htmlTitle, projectHtmlArtifact } from '../../utils/h
 import { saveHtmlToFolder } from '../../utils/connectedFolder';
 import './engineering.css';
 
-export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean }
+export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean; canvasProject?: EngineeringProject; canvasCommands?: string[]; onCanvasProjectChange?: (project: EngineeringProject, signal: AbortSignal) => Promise<string> }
 
 const REVIEW_STORAGE_KEY = 'ahpah_engineering_review_v1';
 type WorkspaceTab = 'code' | 'changes' | 'preview' | 'terminal';
@@ -62,7 +62,7 @@ function DiffPanel({ change }: { change: ProjectChange }) {
   </div>;
 }
 
-export function CodingWorkspace({ send, providers, onOpenSettings, localExecution }: CodingWorkspaceProps) {
+export function CodingWorkspace({ send, providers, onOpenSettings, localExecution, canvasProject, canvasCommands, onCanvasProjectChange }: CodingWorkspaceProps) {
   const [initial] = useState(loadWorkspace);
   const [project, setProject] = useState(initial.project);
   const [pending, setPending] = useState<EngineeringChangeSet | null>(initial.pending);
@@ -87,8 +87,8 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const [savedSnapshot, setSavedSnapshot] = useState<{ project: EngineeringProject; pending: EngineeringChangeSet | null } | null>(null);
   const [protectSavedCopy, setProtectSavedCopy] = useState(initial.recovered);
   const [undo, setUndo] = useState<{ changes: ProjectChange[]; label: string }[]>([]);
-  const [fileDialog, setFileDialog] = useState<'add' | 'delete' | 'new' | 'import' | null>(null);
-  const [preparedImport, setPreparedImport] = useState<{ project: EngineeringProject; message: string } | null>(null);
+  const [fileDialog, setFileDialog] = useState<'add' | 'delete' | 'new' | 'import' | null>(canvasProject ? 'import' : null);
+  const [preparedImport, setPreparedImport] = useState<{ project: EngineeringProject; message: string } | null>(canvasProject ? { project: canvasProject, message: 'Open these actual Canvas source files in the editor. Download your current Code project first if you want to keep it.' } : null);
   const [newPath, setNewPath] = useState('');
   const [previewEntry, setPreviewEntry] = useState(() => initial.project.files.some(file => file.path === 'index.html') ? 'index.html' : initial.project.files.find(file => /\.html?$/i.test(file.path))?.path ?? 'index.html');
   const [previewRevision, setPreviewRevision] = useState(0);
@@ -96,7 +96,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [previewUrl, setPreviewUrl] = useState('');
   const [useBuiltPreview, setUseBuiltPreview] = useState(false);
-  const [command, setCommand] = useState('node --check script.js');
+  const [command, setCommand] = useState(canvasCommands?.[0] || 'node --check script.js');
   const [commandApproval, setCommandApproval] = useState(false);
   const [executionAvailable, setExecutionAvailable] = useState(false);
   const [executionReason, setExecutionReason] = useState(localExecution ? 'Checking the local execution bridge…' : 'Shell commands are available when this project runs locally. Browser editing and HTML preview work here.');
@@ -211,12 +211,25 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     setProject(next);
   };
 
+  useEffect(() => {
+    if (!canvasProject || project.id !== canvasProject.id || project.revision === canvasProject.revision || !onCanvasProjectChange) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void onCanvasProjectChange(project, controller.signal).then(message => {
+        if (alive.current && !controller.signal.aborted && message) setNotice(message);
+      }).catch(error => {
+        if (alive.current && !controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Could not sync these Canvas files to your PC.');
+      });
+    }, 650);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [project, canvasProject, onCanvasProjectChange]);
+
   const replaceProject = (next: EngineeringProject) => {
     agentController.current?.abort(); executionController.current?.abort(); runSession.current++;
     setBusy(false); setExecutionBusy(false); commitProject(next); setSelectedPath(next.files[0]?.path ?? '');
     setPending(null); setUndo([]); setActivities([]); setPlan([]); setPhase(null); setExplanation(''); setTab('code'); setNotice(''); setProtectSavedCopy(false);
     setPreviewEntry(next.files.some(file => file.path === 'index.html') ? 'index.html' : next.files.find(file => /\.html?$/i.test(file.path))?.path ?? 'index.html');
-    setPreviewUrl(''); setUseBuiltPreview(false); setExecution(null); setCommand(next.files.some(file => file.path === 'package.json') ? 'npm run build' : `node --check ${next.files.find(file => /\.[cm]?js$/.test(file.path))?.path ?? 'script.js'}`);
+    setPreviewUrl(''); setUseBuiltPreview(false); setExecution(null); setCommand((next.id === canvasProject?.id && canvasCommands?.[0]) || (next.files.some(file => file.path === 'package.json') ? 'npm run build' : `node --check ${next.files.find(file => /\.[cm]?js$/.test(file.path))?.path ?? 'script.js'}`));
   };
 
   const importFiles = async (selected: File[], folder: boolean) => {
@@ -428,7 +441,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
           {activeFile ? <div className="eng-editor"><div className="eng-editor-gutter" aria-hidden="true">{gutterText}</div><textarea key={activeFile.path} aria-label={`Edit ${activeFile.path}`} spellCheck={false} wrap="off" value={activeFile.content} onChange={event => updateFile(event.target.value)} onScroll={event => { const gutter = event.currentTarget.previousElementSibling; if (gutter) gutter.scrollTop = event.currentTarget.scrollTop; }} onKeyDown={event => {
             if (event.key === 'Tab') { event.preventDefault(); const input = event.currentTarget; const start = input.selectionStart; const end = input.selectionEnd; updateFile(input.value.slice(0, start) + '  ' + input.value.slice(end)); requestAnimationFrame(() => { input.selectionStart = input.selectionEnd = start + 2; }); }
           }} /></div> : <div className="eng-panel-empty"><Code2 size={32} /><h2>Your project starts with a file.</h2><p>Create a source file, import a folder, or describe what you want the agent to build.</p><button className="eng-button eng-primary" onClick={() => setFileDialog('add')}><Plus size={14} />Create file</button></div>}
-          <footer className="eng-editor-footer"><span>{activeFile?.path.split('.').pop()?.toUpperCase() ?? 'SOURCE'} <span>UTF-8</span></span><span>Direct edits save automatically · agent changes require review</span></footer>
+          <footer className="eng-editor-footer"><span>{activeFile?.path.split('.').pop()?.toUpperCase() ?? 'SOURCE'} <span>UTF-8</span></span><span>{canvasProject?.id === project.id ? 'Canvas edits sync to your folder · agent changes require review' : 'Direct edits save automatically · agent changes require review'}</span></footer>
         </section>}
 
         {tab === 'changes' && <section id="eng-panel-changes" role="tabpanel" aria-labelledby="eng-tab-changes" className="eng-changes-panel">

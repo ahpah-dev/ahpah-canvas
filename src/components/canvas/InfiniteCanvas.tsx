@@ -71,7 +71,7 @@ interface InfiniteCanvasProps {
   onSpawnWorker: (parentCardId: string) => void;
   onStopPrompt: (cardId: string) => void;
   onOpenSettings: () => void;
-  onOpenCode: () => void;
+  onOpenCode: (cardId?: string) => void;
   isSimulated: boolean;
 }
 
@@ -133,7 +133,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     onSpawnWorker: (id: string) => propsRef.current.onSpawnWorker(id),
     onStopPrompt: (id: string) => propsRef.current.onStopPrompt(id),
     onOpenSettings: () => propsRef.current.onOpenSettings(),
-    onOpenCode: () => propsRef.current.onOpenCode(),
+    onOpenCode: (cardId?: string) => propsRef.current.onOpenCode(cardId),
   }), []);
   const [grid, setGrid] = useState(() => loadAppearance().grid !== "none");
   useEffect(() => {

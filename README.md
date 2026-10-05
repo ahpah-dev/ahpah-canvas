@@ -14,7 +14,7 @@ An open source agentic coding workspace with real project files, an editor, visi
 - Explicitly approved Node and npm commands in the local app, real output, generated-file review, and compiled previews after a supported build.
 - Live provider catalogs, searchable model selection, and free or paid labels. Model IDs come from the connected provider rather than a bundled mock list.
 - Named custom API profiles with a base URL, optional API key, selected model, and streaming preference.
-- Streaming conversations with cancellation, retained partial answers, elapsed time, model identity, and reported token usage.
+- Canvas coding agents with real list/read/search/write/patch tools, visible action results, persistent source projects, cancellation, and automatic PC delivery after source review.
 - Kilo Auto Free recovery that checks the live catalog and uses verified free routes when a route stalls or returns an empty answer.
 - An infinite canvas with drag, resize, pan, zoom, minimap, card arrangement, and shared project memory.
 - Notes, embedded previews, saved command snippets, workspace import and export, and browser-local persistence.
@@ -60,17 +60,27 @@ The agent operates on the project files held by this workspace. It can list, rea
 
 Imported projects support up to **200 text files**, **256 KB per file**, and **2 MB total**. Generated folders, `.git`, `node_modules`, private `.env` files, and key files are excluded. Importing copies source into the workspace; applying a proposal does not edit the original folder on your computer.
 
-### Connect a PC folder and export HTML
+### Canvas coding and automatic PC saving
 
 Open **Connect folder** in the workspace's top bar, choose a local folder, and grant read/write permission. Desktop Chrome and Edge support this connection on localhost and the HTTPS Pages site. The directory handle is remembered in IndexedDB; if the browser revokes permission, click **Reconnect folder** before exporting again.
 
-Completed HTML games and pages save automatically to the connected folder when the provider finishes; a separate **Save to folder** click is not required. If no folder is connected yet, up to ten files wait in the current session and save when you choose or reconnect a folder. The conversation receives the actual destination after the write completes. Saying not to save disables automatic saving for that response.
+Canvas now runs a bounded engineering tool loop. Describe the app, game, feature, or fix directly in an agent card. The agent plans, inspects files, writes or patches actual source, reads its changes for review, and finishes with an implementation summary. Tool results come from the application. Invalid actions and unresolved tool failures are fed back to the model; incomplete runs keep partial source for continuation without automatically delivering it to the PC. Coding questions can finish without changing files.
 
-For an existing game, ask **Export the game "HATE" to my PC as HTML**. If its complete source exists in the conversation, the app saves **HATE.html** immediately without another model request. If the provider previously returned only a creation claim, missing local assets, or truncated source, Canvas requests the actual complete implementation and can make two additional recovery attempts. Recovery generates missing source from the conversation specifications; it does not pretend to recover a file that never existed. Complete HTML without a closing Markdown fence is also recognized. If the model still fails, the app reports that nothing was saved and retains the conversation.
+Completed source projects automatically save under **`canvas/<project-id>/`** in your connected folder. Each card owns a separate project so parallel agents do not overwrite one another. HTML, CSS, JavaScript, Python, TypeScript, and other supported text source can be delivered. Open **Project files** in a card to inspect actual contents, or choose **Open in Code** to import the project into the editor after preserving your current Code project. Accepted or manual Code edits to that Canvas project also sync automatically. PC files deleted from the editor are retained on disk; Canvas does not automatically delete PC files.
 
-In Code, **Save HTML** bundles the selected HTML entry and its local CSS, JavaScript, and text assets into one file. Missing local resources stop the export with a clear error. The coding agent can also use `export_html` when your goal requests a save/export. Exports of proposed files do not apply those edits to the editor. External URLs still require a connection.
+If no folder is connected or permission has expired, ready source waits in IndexedDB on this device and saves when you choose or reconnect a folder. The queue survives reloads and disconnects, supports up to **210 files / 24 MB**, and shows pending paths in the folder panel. Newer queued content replaces older content at the same path. Use **Retry saving** after resolving a file conflict, or **Clear queue** to cancel pending delivery; source projects remain available. Saying not to save disables automatic saving for that run.
 
-The app reports **Saved folder/filename.html** only after the file writer closes successfully. Replacing a file keeps its previous version as **filename.previous.html**. The folder handle and its existing files are not sent to model providers. Browsers without writable directory access display the requirement to open the app in desktop Chrome or Edge.
+For an existing game, ask **Export the game "HATE" to my PC as HTML**. Complete source from this card's project or earlier conversation exports as **HATE.html** in the connected folder. If the provider previously returned only a creation claim or truncated code, the agent must implement the missing source from the conversation and validate it before exporting. Recovery does not recover an unavailable original file. Missing local resources or an incomplete HTML document prevent an automatic game export. External URLs still require a connection.
+
+In Code, **Save HTML** bundles the selected HTML entry and its local CSS, JavaScript, and text assets into one file. The coding agent can use `export_html` for an explicitly requested save/export. Exports of proposed files do not apply those edits to the editor.
+
+The app reports a PC save only after the writer closes successfully. General source saving refuses to overwrite unrelated files or source edited outside the app. Replaced files keep unique versions under **`.ahpah-backups/`**. Browser directory writes cannot make a multi-file batch atomic; if an IO failure interrupts delivery, the error lists the files already saved. HTML exports may replace their selected filename with a backup. The connected folder is a save destination; its other files are not automatically read or sent to model providers. Source created in Canvas and included in workspace exports travels with the workspace.
+
+### Tool calling
+
+The app uses a validated JSON action protocol compatible with the connected text providers. Available coding tools include `plan`, `list_files`, `read_file` (with line ranges), `search_files`, `write_file`, `replace_in_file`, and `finish`. Canvas also supports `save_files` to prepare delivery and `export_html` for requested HTML exports. Source writes happen after successful source review; queued delivery is reported distinctly from a confirmed PC save. Canvas prevents automatic PC deletion. `run_command` queues an exact command for review in Code and never approves or executes it by itself.
+
+Runs allow up to **20 steps**, **8 actions per response**, and **10 minutes**. Unknown tools, invalid paths, ambiguous replacements, incomplete model JSON, cancellation, and folder failures produce real errors. Model reliability and provider availability still determine whether a run can complete; the app does not claim runtime verification without actual command output.
 
 ### Preview and local commands
 
@@ -118,7 +128,7 @@ Kilo's API did not return CORS headers when checked on October 5, 2026. Use the 
 
 Project files, canvas content, appearance, and API profiles are saved in this browser's local storage. API keys are not encrypted there. Use a personal browser profile, and remove credentials on a shared device. Keys are forwarded only to the provider selected for a request; workspace exports exclude API configuration and credentials.
 
-In Code, the goal, file listing, inspected source, and prior tool results are sent to the selected model provider. Canvas conversations include their history and shared project memory. Local approved commands mirror the current project into the dedicated project directory. The app includes no analytics or hosted workspace storage.
+In Code, the goal, file listing, inspected source, and prior tool results are sent to the selected model provider. Canvas coding runs include their conversation context, shared project memory, inspected source, and real tool results. Local approved commands mirror the current project into the dedicated project directory. The app includes no analytics or hosted workspace storage.
 
 ## Canvas controls
 
@@ -133,7 +143,7 @@ In Code, the goal, file listing, inspected source, and prior tool results are se
 | Send a prompt | The card composer or bottom command bar |
 | Cancel a request | **Stop**, preserving partial text |
 
-Canvas notes support headings, bullets, and persistent checkboxes. Embedded website cards depend on the site's framing policy. Canvas command snippets can be saved and copied; execution approvals belong to Code. Linked cards visualize relationships and do not automatically execute tasks. Demo simulation is explicitly labeled and off by default.
+Canvas notes support headings, bullets, and persistent checkboxes. Embedded website cards depend on the site's framing policy. Canvas command snippets can be saved and copied; execution approvals belong to Code. Linked cards visualize relationships and do not automatically execute tasks. Each agent card retains its own source project; exporting a workspace includes these source projects but excludes folder handles and API configuration. Demo simulation is explicitly labeled and off by default.
 
 ## Development
 

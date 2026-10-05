@@ -21,7 +21,7 @@ const cardFields = [
   "providerId", "providerName", "status", "role", "history", "currentPrompt",
   "tokensUsed", "cpuPercent", "lastAction", "parentId", "pinned", "minimized",
   "browserUrl", "browserDevice", "noteContent", "cliCommand", "routedModel",
-  "modelSource", "legacyMigrated", "compressionSavedPercent",
+  "modelSource", "legacyMigrated", "compressionSavedPercent", "pendingCommands",
 ] satisfies (keyof CanvasCard)[];
 const lineFields = ["id", "text", "type", "timestamp"];
 
@@ -70,6 +70,7 @@ export function validateCards(value: unknown): CanvasCard[] {
       ].some(
         (key) => card[key] !== undefined && typeof card[key] !== "string",
       ) ||
+      (card.pendingCommands !== undefined && (!Array.isArray(card.pendingCommands) || card.pendingCommands.length > 10 || card.pendingCommands.some(command => typeof command !== 'string' || command.length > 240))) ||
       card.history.some(
         (line) =>
           !isRecord(line) ||
@@ -87,6 +88,7 @@ export function validateCards(value: unknown): CanvasCard[] {
             "plan",
             "diff",
             "route",
+            "tool",
           ].includes(line.type),
       )
     ) {

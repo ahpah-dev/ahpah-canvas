@@ -26,6 +26,7 @@ import { hasSameCardContent } from "../../utils/cardRendering";
 import { isNearScrollBottom } from "../../utils/interactionScheduling";
 import { completeHtml, htmlFilename, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
 import { saveHtmlToFolder } from '../../utils/connectedFolder';
+import { loadCanvasProject } from '../../utils/canvasAgentRuntime';
 
 interface AgentCardProps {
   card: CanvasCard;
@@ -38,7 +39,7 @@ interface AgentCardProps {
   onSpawnWorker?: (parentCardId: string) => void;
   onStopPrompt: (cardId: string) => void;
   onOpenSettings: () => void;
-  onOpenCode?: () => void;
+  onOpenCode?: (cardId?: string) => void;
   isSimulated: boolean;
   providerConfigRevision: number;
 }
@@ -148,6 +149,10 @@ function AgentCardBody({
   const followingOutput = useRef(true);
   const oldSize = useRef<{ width: number; height: number } | null>(null);
   const busy = isBusy(card);
+  const sourceProject = loadCanvasProject(card.id);
+  const [sourcePath, setSourcePath] = useState('');
+  const sourceFile = sourceProject?.files.find(file => file.path === sourcePath);
+
   const requestId = card.history.findLast((line) => line.type === "input")?.id;
   const [clock, setClock] = useState({ requestId: "", seconds: 0 });
   const elapsed = clock.requestId === requestId ? clock.seconds : 0;
@@ -327,8 +332,8 @@ function AgentCardBody({
               {kilo && !supportsLocalBridge()
                 ? "Kilo needs the local app because its API blocks browser connections. You can connect a browser-compatible custom API in Settings."
                 : kilo
-                ? "Use a live model to discuss an implementation, review pasted code, or work through a bug."
-                : "Choose a live model to discuss your code. Open Code to work with project files and review edits."}
+                ? "Describe your software. The agent plans, reads, edits and reviews real files, then saves completed work to your connected folder."
+                : "Choose a live model and connect a folder. Build and refine real project files directly from this canvas."}
             </p>
             {kilo && !supportsLocalBridge() && <a className="cw-text-button" href="https://github.com/ahpah-dev/ahpah-canvas#start-locally" target="_blank" rel="noreferrer">Run locally <ChevronRight size={12} /></a>}
             <div className="cw-welcome-prompts">
@@ -369,6 +374,13 @@ function AgentCardBody({
                 <p>{line.text.replace(/^›\s*/, "")}</p>
               </div>
             );
+          if (line.type === "tool") {
+            const [title, ...details] = line.text.split('\n');
+            return <details className="cw-tool-result" key={line.id}>
+              <summary><span className="cw-tool-icon"><FileCode2 size={13} /></span><strong>{title}</strong><ChevronDown size={11} /></summary>
+              <p>{details.join('\n')}</p>
+            </details>;
+          }
           if (line.type === "system" || line.type === "route")
             return (
               <div className="cw-system-line" key={line.id}>
@@ -402,6 +414,12 @@ function AgentCardBody({
             </div>
           );
         })}
+        {sourceProject && sourceProject.files.length > 0 && <div className="cw-source-project">
+          <header><span><FileCode2 size={14} /> PROJECT FILES</span><small>{sourceProject.files.length} files</small></header>
+          <div className="cw-source-files">{sourceProject.files.map(file => <button key={file.path} onClick={() => setSourcePath(sourcePath === file.path ? '' : file.path)} aria-expanded={sourcePath === file.path}><FileCode2 size={12} /><span>{file.path}</span><small>{Math.ceil(file.content.length / 1024)} KB</small></button>)}</div>
+          {sourceFile && <div className="cw-source-content"><CodeBlock text={sourceFile.content} language={sourceFile.path} complete /></div>}
+          <footer><span>Source retained in this browser</span>{onOpenCode && <button onClick={() => onOpenCode(card.id)}>Open in Code <ChevronRight size={12} /></button>}</footer>
+        </div>}
         {busy && (
           <div className="cw-thinking">
             <span>
@@ -416,7 +434,7 @@ function AgentCardBody({
                   : `Waiting for ${providerName}`}
               </span>
               <small>{elapsed}s elapsed · Stop at any time.</small>
-              <small>Completed HTML saves automatically. Missing source is recovered before saving.</small>
+              <small>Validated file tools run here. Completed source saves automatically to your connected folder.</small>
               {kilo && configuredModel === "kilo-auto/free" && (
                 <small>Switches free models if no answer starts within 30s.</small>
               )}
@@ -438,7 +456,7 @@ function AgentCardBody({
         </div>
       )}
       <div className="cw-card-quick">
-        {onOpenCode && <button onClick={onOpenCode} title="Work with project files and review proposed edits">
+        {onOpenCode && <button onClick={() => onOpenCode(card.id)} title="Open this canvas project in the file editor">
           <FileCode2 size={11} /> Open Code
         </button>}
         <button
@@ -491,8 +509,9 @@ function AgentCardBody({
               send();
             }
           }}
-          placeholder="Describe a change, paste code, or ask for a review…"
+          placeholder="Build something, edit a file, or fix a bug…"
           rows={2}
+          maxLength={6000}
         />
         <div>
           <span>

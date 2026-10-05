@@ -2060,6 +2060,13 @@
 .cw-folder-dialog .cw-folder-hint { font-size:11px; }
 .cw-folder-dialog .cw-folder-saved { display:flex; align-items:center; gap:6px; color:var(--cw-success, #4ade80); overflow-wrap:anywhere; }
 .cw-folder-dialog .cw-folder-error { color:var(--cw-error, #fb7185); }
+.cw-folder-queue { padding:14px; border:1px solid var(--cw-border, #2b2e3d); border-radius:14px; background:color-mix(in srgb,var(--cw-accent, #a78bfa) 5%,transparent); }
+.cw-folder-queue > p { display:flex; gap:7px; align-items:center; margin:0 0 10px; color:var(--cw-text, #f2f3ff); font-size:12px; }
+.cw-folder-queue ul { display:grid; gap:5px; margin:0; padding:0; list-style:none; }
+.cw-folder-queue li { font-family:monospace; font-size:11px; color:var(--cw-muted, #a4a8bd); overflow-wrap:anywhere; }
+.cw-folder-queue > span, .cw-folder-queue > small { display:block; margin-top:9px; font-size:11px; line-height:1.6; color:var(--cw-muted, #a4a8bd); }
+.cw-folder-queue > div { display:flex; gap:9px; margin-top:10px; }
+.cw-folder-queue > div button { display:inline-flex; gap:5px; align-items:center; font-size:11px; padding:6px 8px; border:1px solid var(--cw-border, #2b2e3d); border-radius:8px; }
 .cw-folder-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:22px; }
 .cw-nav .cw-folder-dialog .cw-folder-primary { padding:10px 14px; background:var(--cw-accent, #a78bfa); color:#0b0d17; border-radius:10px; font-weight:650; }
 .cw-folder-spinner { animation:cw-folder-spin 1s linear infinite; }
@@ -2071,3 +2078,25 @@
 @media (prefers-reduced-motion:reduce) { .cw-folder-dialog, .cw-folder-spinner { animation:none; } }
 html[data-canvas-motion="none"] .cw-folder-dialog, html[data-canvas-motion="none"] .cw-folder-spinner { animation:none; }
 @media (max-width:600px) { .cw-nav nav .cw-folder-button > span { display:none; } .cw-folder-dialog { padding:23px; } }
+.cw-tool-result { margin: 9px 18px; border: 1px solid var(--cw-border); border-radius: 10px; background: var(--cw-panel); animation: cw-folder-in var(--cw-motion-duration, .22s) ease both; }
+.cw-tool-result summary { display: flex; align-items: center; gap: 9px; padding: 10px 12px; cursor: pointer; list-style: none; font-size: 11px; }
+.cw-tool-result summary::-webkit-details-marker { display: none; }
+.cw-tool-result summary strong { flex: 1; overflow-wrap: anywhere; font-weight: 550; }
+.cw-tool-icon { display: grid; place-items: center; color: var(--cw-accent); }
+.cw-tool-result[open] summary > svg { transform: rotate(180deg); }
+.cw-tool-result p { margin: 0; padding: 0 12px 12px 34px; font-size: 11px; line-height: 1.6; color: var(--cw-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cw-source-project { margin: 14px 18px; border: 1px solid var(--cw-border); border-radius: 12px; overflow: hidden; }
+.cw-source-project > header, .cw-source-project > footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 12px; background: var(--cw-panel); }
+.cw-source-project > header span { display: flex; align-items: center; gap: 7px; font-size: 10px; letter-spacing: .08em; color: var(--cw-accent); }
+.cw-source-project small, .cw-source-project > footer span { font-size: 10px; color: var(--cw-muted); }
+.cw-source-files { max-height: 180px; overflow: auto; padding: 5px; }
+.cw-source-files button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.cw-source-files button:hover, .cw-source-files button[aria-expanded="true"] { background: var(--cw-panel); }
+.cw-source-files button span { flex: 1; overflow-wrap: anywhere; }
+.cw-source-content { max-height: 280px; overflow: auto; }
+.cw-source-content .cw-response-code { margin: 0; border-radius: 0; }
+.cw-source-project > footer button { display: flex; align-items: center; gap: 5px; background: transparent; border: 0; color: var(--cw-accent); font: inherit; font-size: 11px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .cw-tool-result { animation: none; } }
+
+html[data-canvas-motion="none"] .cw-tool-result { animation: none; }
+.cw-source-project button:focus-visible, .cw-tool-result summary:focus-visible { outline: 2px solid var(--cw-accent); outline-offset: -2px; }

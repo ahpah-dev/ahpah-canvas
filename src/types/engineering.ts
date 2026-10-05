@@ -66,3 +66,10 @@ export interface AgentRunResult {
   stopped: boolean;
   error?: string;
 }
+
+/** A queued file is not a successful PC write. Consumers must preserve this distinction. */
+export interface AgentFileSyncResult {
+  saved: boolean;
+  destination?: string;
+  reason?: string;
+}
