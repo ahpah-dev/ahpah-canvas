@@ -186,6 +186,15 @@ const mimeForPath = (path: string) => path.endsWith('.svg') ? 'image/svg+xml' : 
 
 export interface ProjectPreview { html: string; issues: string[] }
 export function buildProjectPreview(files: EngineeringFile[], entryPath = 'index.html', channel = 'ahpah-preview'): ProjectPreview {
+  return renderProjectHtml(files, entryPath, channel);
+}
+
+// Export the actual project without iframe monitoring or the editor's preview policy.
+export function buildProjectHtml(files: EngineeringFile[], entryPath = 'index.html'): ProjectPreview {
+  return renderProjectHtml(files, entryPath, null);
+}
+
+function renderProjectHtml(files: EngineeringFile[], entryPath: string, channel: string | null): ProjectPreview {
   const map = new Map(validateProjectFiles(files).map(file => [file.path, file.content]));
   const entry = map.get(entryPath);
   if (entry === undefined) return { html: '', issues: [`Choose an HTML entry file. ${entryPath} is not in this project.`] };
@@ -248,6 +257,10 @@ export function buildProjectPreview(files: EngineeringFile[], entryPath = 'index
   const importMap = `<script type="importmap">${escapeScript(JSON.stringify({ imports: Object.fromEntries(modules) }))}</script>`;
   // A sandboxed iframe gets an opaque origin; project scripts cannot access the app's files or keys.
   const policy = '<meta http-equiv="Content-Security-Policy" content="default-src data: blob: https:; script-src \'unsafe-inline\' \'unsafe-eval\' data: blob: https:; style-src \'unsafe-inline\' data: https:; connect-src https:; form-action \'none\'; base-uri \'none\'">';
-  html = /<head\b[^>]*>/i.test(html) ? html.replace(/<head\b[^>]*>/i, match => `${match}${policy}${monitor}${importMap}`) : `${policy}${monitor}${importMap}${html}`;
+  const additions = `${channel === null ? '<meta charset="utf-8">' : policy + monitor}${importMap}`;
+  if (/<head\b[^>]*>/i.test(html)) html = html.replace(/<head\b[^>]*>/i, match => `${match}${additions}`);
+  else if (channel === null && /<html\b[^>]*>/i.test(html)) html = html.replace(/<html\b[^>]*>/i, match => `${match}<head>${additions}</head>`);
+  else if (channel === null) html = `<!doctype html><html><head>${additions}</head><body>${html}</body></html>`;
+  else html = `${additions}${html}`;
   return { html, issues: [...new Set(issues)] };
 }

@@ -1,5 +1,7 @@
 import type { AgentActivity, AgentMessage, AgentRunEvent, AgentRunResult, AgentSender, EngineeringProject } from '../types/engineering.ts';
 import { createChangeSet, diffProjectFiles, normalizeProjectPath, validateProjectFiles } from './projectFiles.ts';
+import { htmlFilename, projectHtmlArtifact, requestsHtmlExport } from './htmlExport.ts';
+import type { HtmlArtifact } from './htmlExport.ts';
 
 export const AGENT_MAX_TURNS = 20;
 export const AGENT_MAX_ACTIONS = 8;
@@ -23,6 +25,7 @@ Supported actions:
 {"tool":"replace_in_file","path":"relative/path","old":"exact unique existing text","new":"replacement text"} — for a focused edit, including large files; inspect the relevant text with read/search first.
 {"tool":"delete_file","path":"relative/path"}
 {"tool":"run_command","command":"npm run test"} — requests approval only; it is NOT executed during this loop.
+{"tool":"export_html","path":"index.html","filename":"HATE.html"} — bundles local CSS/JS and writes one HTML file into the user's connected PC folder. Only use when the user requests an HTML save/export. The actual save result is returned; never claim success before it. This may export staged files without applying them to the editor. If no folder is connected, tell the user to connect one in the top bar.
 {"tool":"finish","summary":"What changed","review":"Actual checks of the files plus limitations; say tests not run unless real output was provided."}
 Use up to 8 actions in each response. Read an existing file before writing or deleting it. New files need no read.
 Plan first. Start with list/read/search; use search to inspect a large project efficiently. Be concise and return complete files within the response limit. For websites prefer plain HTML/CSS/JS unless the project already uses a framework or the user asks for one.
@@ -37,6 +40,7 @@ type AgentAction =
   | { tool: 'replace_in_file'; path: string; old: string; new: string }
   | { tool: 'delete_file'; path: string }
   | { tool: 'run_command'; command: string }
+  | { tool: 'export_html'; path: string; filename?: string }
   | { tool: 'finish'; summary: string; review: string };
 
 export function parseAgentActions(text: string): AgentAction[] {
@@ -65,6 +69,7 @@ export function parseAgentActions(text: string): AgentAction[] {
       case 'replace_in_file': return { tool: 'replace_in_file', path: normalizeProjectPath(textField('path', 240)), old: textField('old', 50000), new: textField('new', 262_144) };
       case 'delete_file': return { tool: 'delete_file', path: normalizeProjectPath(textField('path', 240)) };
       case 'run_command': return { tool: 'run_command', command: textField('command', 240) };
+      case 'export_html': return { tool: 'export_html', path: normalizeProjectPath(textField('path', 240)), ...(item.filename !== undefined ? { filename: htmlFilename(textField('filename', 110)) } : {}) };
       case 'finish': return { tool: 'finish', summary: textField('summary'), review: textField('review') };
       default: throw new Error(`Unknown tool: ${String(item.tool)}. Use the documented JSON tools.`);
     }
@@ -86,6 +91,7 @@ export async function runEngineeringAgent(options: {
   maxTurns?: number;
   timeoutMs?: number;
   context?: string;
+  exportHtml?: (artifact: HtmlArtifact) => Promise<string>;
 }): Promise<AgentRunResult> {
   const { project, goal, providerId, send, onEvent } = options;
   if (!goal.trim() || goal.length > AGENT_MAX_GOAL_CHARS) throw new Error(`Describe a goal in 1–${AGENT_MAX_GOAL_CHARS} characters.`);
@@ -212,6 +218,15 @@ export async function runEngineeringAgent(options: {
               emit('notice', 'Command awaits approval', action.command);
               results.push({ tool: action.tool, command: action.command, executed: false, status: 'Queued for explicit user approval. No terminal result is available.' });
               break;
+            case 'export_html': {
+              if (!requestsHtmlExport(goal)) throw new Error('The user must request an HTML save/export before writing into their connected PC folder.');
+              if (!options.exportHtml) throw new Error('No connected folder export handler is available. Connect a PC folder in the top bar.');
+              const artifact = projectHtmlArtifact(working, action.path, action.filename);
+              const saved = await options.exportHtml(artifact);
+              results.push({ tool: action.tool, saved: true, destination: saved, filename: artifact.filename, stagedFiles: diffProjectFiles(original, working).length > 0 });
+              emit('tool', 'HTML saved to your PC', `${saved} · file written successfully${diffProjectFiles(original, working).length ? ' · proposed editor changes still await review' : ''}`);
+              break;
+            }
             case 'finish':
               if (batchFailed) throw new Error('A tool failed in this response. Inspect its real error and repair or clearly acknowledge the limitation before finishing in a later response.');
               if (!didPlan && diffProjectFiles(original, working).length) throw new Error('Plan and review changes before finishing.');

@@ -5,6 +5,8 @@ import { applyProjectChanges, buildProjectPreview, createChangeSet, createProjec
 import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRuntime';
 import { discoverProjectExecution, runProjectCommand } from '../../utils/projectExecution';
 import { useDialogFocus } from '../../utils/useDialogFocus';
+import { htmlExportRequest, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
+import { saveHtmlToFolder } from '../../utils/connectedFolder';
 import './engineering.css';
 
 export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean }
@@ -128,7 +130,8 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const lineCount = activeFile ? activeFile.content.split('\n').length : 1;
   const gutterText = useMemo(() => Array.from({ length: Math.min(lineCount, 10000) }, (_, index) => String(index + 1)).join('\n'), [lineCount]);
   const pendingCount = pending?.changes.length ?? 0;
-  const goalReady = goal.trim().length > 0 && Boolean(activeProvider?.model) && !busy;
+  const exportRequest = htmlExportRequest(goal);
+  const goalReady = goal.trim().length > 0 && (Boolean(activeProvider?.model) || Boolean(exportRequest)) && !busy;
   const saveStatus = protectSavedCopy || storageError ? 'error' : savedSnapshot?.project === project && savedSnapshot?.pending === pending ? 'saved' : 'saving';
   const canExecute = localExecution && executionAvailable;
   useDialogFocus(Boolean(fileDialog || commandApproval), () => { setFileDialog(null); setCommandApproval(false); });
@@ -249,6 +252,17 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not download the project.'); }
   };
 
+  const saveProjectHtml = async (name?: string) => {
+    const snapshot = projectRef.current;
+    try {
+      const entry = name ? snapshot.files.find(file => /\.html?$/i.test(file.path) && (htmlTitle(file.content).toLowerCase() === name.toLowerCase() || file.path.split('/').pop()?.replace(/\.html?$/i, '').toLowerCase() === name.toLowerCase()))?.path : activeFile && /\.html?$/i.test(activeFile.path) ? activeFile.path : previewEntry;
+      if (!entry) throw new Error(`No HTML entry for “${name}” exists in this Code project. Export it from the Canvas conversation that contains it.`);
+      setNotice('Saving HTML to your connected PC folder…');
+      const saved = await saveHtmlToFolder(projectHtmlArtifact(snapshot.files, entry, name));
+      if (alive.current) setNotice(`Saved ${saved} on your PC.${pendingCount ? ' This export uses your accepted files; proposed changes are still awaiting review.' : ''}`);
+    } catch (error) { if (alive.current) setNotice(error instanceof Error ? error.message : 'Could not save the HTML file.'); }
+  };
+
   const updateFile = (content: string) => {
     if (!activeFile) return;
     try {
@@ -285,6 +299,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const beginGoal = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!goalReady || executionBusy) return;
+    if (exportRequest) { await saveProjectHtml(exportRequest.name); return; }
     if (pendingCount && goalMode === 'build') { setNotice('Review, accept, or discard the current proposed changes before starting a new build.'); setTab('changes'); return; }
     const controller = new AbortController(); agentController.current = controller;
     const session = ++runSession.current;
@@ -307,6 +322,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     try {
       const result = await runEngineeringAgent({ project: snapshot, goal: requestGoal, providerId: chosenProviderId, signal: controller.signal, context: actualOutput,
         send,
+        exportHtml: artifact => { controller.signal.throwIfAborted(); if (!alive.current || session !== runSession.current) throw new Error('The coding session changed before export. Retry the export.'); return saveHtmlToFolder(artifact); },
         onEvent: update => {
           if (!alive.current || session !== runSession.current) return;
           if (update.phase) setPhase(update.phase);
@@ -374,6 +390,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
       <div className="eng-project-actions">
         <button className="eng-button eng-icon-mobile" aria-label="Import folder" title="Import folder" onClick={() => folderInput.current?.click()} disabled={busy || executionBusy}><FolderOpen size={14} /><span>Import folder</span></button>
         <button className="eng-button eng-icon-mobile" aria-label="Download ZIP" title="Download ZIP" onClick={() => downloadProject()}><Download size={14} /><span>Download ZIP</span></button>
+        <button className="eng-button eng-icon-mobile" aria-label="Save HTML to connected folder" title="Save HTML to connected PC folder" onClick={() => void saveProjectHtml()} disabled={!htmlEntries.length || busy || executionBusy}><FolderOpen size={14} /><span>Save HTML</span></button>
         <button className="eng-button eng-icon-button" title="Start a new project" aria-label="Start a new project" onClick={() => setFileDialog('new')} disabled={busy || executionBusy}><Plus size={15} /></button>
       </div>
     </header>
@@ -461,7 +478,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         <form className="eng-composer" onSubmit={beginGoal}>
           <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? '20 steps · 10 min budget' : 'Read only'}</span></div>
           <textarea aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-          <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy}>{goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
+          <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
           <div className="eng-provider-model">{activeProvider?.model ? <><span className="eng-connection-dot" />{activeProvider.model}</> : <button type="button" onClick={onOpenSettings}>Choose a model in Settings <ExternalLink size={10} /></button>}</div>
         </form>
       </aside>

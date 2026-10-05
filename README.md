@@ -7,6 +7,7 @@ An open source agentic coding workspace with real project files, an editor, visi
 ## Features
 
 - A persistent project explorer and editor. Start with HTML/CSS/JavaScript files, import your own text source files, and download the finished project as a ZIP.
+- A connected PC folder shared by Canvas and Code. Export requests write real HTML files there, including local project CSS and JavaScript, with actual save results and a previous-version backup.
 - A real coding agent loop that plans a goal, lists and reads files, searches source, and stages file edits or deletions. Tool activity shows what actually happened.
 - File changes remain pending until you review and apply them. Accept individual files or a complete set, detect conflicts with your own edits, and undo applied changes.
 - An isolated browser preview for supported HTML/CSS/JavaScript projects, with missing-resource diagnostics and captured runtime errors.
@@ -54,6 +55,16 @@ Start OmniRoute or another local model server separately; the app does not insta
 The agent operates on the project files held by this workspace. It can list, read, search, write, replace text, and delete files through validated app tools. Writes and deletions are staged for review. A run has a bounded iteration count and deadline; **Stop** cancels the model request and preserves work already staged.
 
 Imported projects support up to **200 text files**, **256 KB per file**, and **2 MB total**. Generated folders, `.git`, `node_modules`, private `.env` files, and key files are excluded. Importing copies source into the workspace; applying a proposal does not edit the original folder on your computer.
+
+### Connect a PC folder and export HTML
+
+Open **Connect folder** in the workspace's top bar, choose a local folder, and grant read/write permission. Desktop Chrome and Edge support this connection on localhost and the HTTPS Pages site. The directory handle is remembered in IndexedDB; if the browser revokes permission, click **Reconnect folder** before exporting again.
+
+In a Canvas conversation containing a complete game, ask **Export the game "HATE" to my PC as HTML**. The app finds that game's complete HTML and writes **HATE.html** into the connected folder without a download dialog or another model request. Complete HTML code blocks also have **Save to folder**. Requests to generate and export HTML save the completed document after the provider returns it.
+
+In Code, **Save HTML** bundles the selected HTML entry and its local CSS, JavaScript, and text assets into one file. Missing local resources stop the export with a clear error. The coding agent can also use `export_html` when your goal requests a save/export. Exports of proposed files do not apply those edits to the editor. External URLs still require a connection.
+
+The app reports **Saved folder/filename.html** only after the file writer closes successfully. Replacing a file keeps its previous version as **filename.previous.html**. The folder handle and its existing files are not sent to model providers. Browsers without writable directory access display the requirement to open the app in desktop Chrome or Edge.
 
 ### Preview and local commands
 

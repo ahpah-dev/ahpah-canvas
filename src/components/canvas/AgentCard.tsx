@@ -17,12 +17,15 @@ import {
   Loader2,
   FileCode2,
   Settings2,
+  FolderOpen,
 } from "lucide-react";
 import type { CanvasCard, TerminalLine } from "../../types/canvas";
 import { loadGatewayConfig, supportsLocalBridge } from "../../utils/gateways";
 import { cardName, isBusy, statusName } from "../../utils/cardPresentation";
 import { hasSameCardContent } from "../../utils/cardRendering";
 import { isNearScrollBottom } from "../../utils/interactionScheduling";
+import { completeHtml, htmlFilename, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
+import { saveHtmlToFolder } from '../../utils/connectedFolder';
 
 interface AgentCardProps {
   card: CanvasCard;
@@ -40,8 +43,19 @@ interface AgentCardProps {
   providerConfigRevision: number;
 }
 
-function CodeBlock({ text, language }: { text: string; language: string }) {
+function CodeBlock({ text, language, complete }: { text: string; language: string; complete: boolean }) {
   const [copied, setCopied] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isHtml = complete && completeHtml(text);
+  const save = async () => {
+    setSaving(true); setSaveStatus('Saving to your PC…');
+    try {
+      const saved = await saveHtmlToFolder(projectHtmlArtifact([{ path: 'index.html', content: text }], 'index.html'));
+      setSaveStatus(`Saved to ${saved}`);
+    } catch (error) { setSaveStatus(error instanceof Error ? error.message : 'Could not save this HTML.'); }
+    finally { setSaving(false); }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -55,6 +69,7 @@ function CodeBlock({ text, language }: { text: string; language: string }) {
       <header>
         <FileCode2 size={12} />
         <span>{language || "Code"}</span>
+        {isHtml && <button className="cw-save-html" aria-label={`Save ${htmlFilename(htmlTitle(text))} to connected folder`} onClick={() => void save()} disabled={saving}><FolderOpen size={12} />{saving ? 'Saving…' : 'Save to folder'}</button>}
         <button aria-label="Copy code" onClick={copy}>
           {copied ? <Check size={12} /> : <Copy size={12} />}
         </button>
@@ -62,6 +77,7 @@ function CodeBlock({ text, language }: { text: string; language: string }) {
       <pre>
         <code>{text.replace(/\n$/, "")}</code>
       </pre>
+      {saveStatus && <p className="cw-html-save-status" role="status">{saveStatus}</p>}
     </div>
   );
 }
@@ -71,14 +87,17 @@ function InlineText({ text }: { text: string }) {
       : piece.startsWith("`") ? <code key={index}>{piece.slice(1, -1)}</code> : piece);
 }
 const ResponseContent = memo(function ResponseContent({ text }: { text: string }) {
+  const parts = text.split(/```/);
+  if (completeHtml(text)) return <CodeBlock text={text} language="html" complete />;
   return (
     <div className="cw-response-text">
-      {text.split(/```/).map((part, index) =>
+      {parts.map((part, index) =>
         index % 2 ? (
           <CodeBlock
             key={index}
             language={part.split("\n")[0].trim()}
             text={part.slice(part.indexOf("\n") + 1)}
+            complete={index < parts.length - 1}
           />
         ) : (
           part.split("\n").map((line, lineIndex) => {

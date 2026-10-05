@@ -31,6 +31,8 @@ import { createDeferredPersistence } from "./utils/interactionScheduling";
 import { handleInteractionFeedback } from "./utils/interactionFeedback";
 import { loadAppearance } from "./utils/appearance";
 import { engineeringProviders, sendEngineeringStep } from "./utils/engineeringGateway";
+import { conversationHtml, htmlExportRequest, requestsHtmlExport } from './utils/htmlExport';
+import { saveHtmlToFolder } from './utils/connectedFolder';
 
 const CodingWorkspace = React.lazy(() => import("./components/engineering/CodingWorkspace").then((module) => ({ default: module.CodingWorkspace })));
 
@@ -510,6 +512,17 @@ export function App() {
       );
     };
     const run = async () => {
+      const exportRequest = htmlExportRequest(prompt);
+      if (exportRequest) {
+        let message: string;
+        try {
+          const artifact = conversationHtml(card.history, exportRequest.name);
+          const saved = await saveHtmlToFolder(artifact);
+          message = `Saved ${artifact.filename} to your connected PC folder: ${saved}. Open the HTML file from that folder to play it.`;
+        } catch (error) { message = error instanceof Error ? error.message : 'Could not save the HTML file to your PC.'; }
+        complete({ status: 'idle', lastAction: message, history: [...card.history, input, { id: outputId, text: message, type: 'system', timestamp }] });
+        return;
+      }
       if (isSimulated) {
         await new Promise((resolve) => window.setTimeout(resolve, 450));
         if (requests.current.get(cardId) !== controller) return;
@@ -565,7 +578,7 @@ export function App() {
         {
           signal: controller.signal,
           providerId: card.providerId,
-          messages: [...context, ...history],
+          messages: [{ role: 'system', content: 'You help with software engineering in Canvas. You cannot write to the PC yourself. The app saves complete HTML through its connected folder. Never claim a file was saved, downloaded, or exported without an actual app result. For HTML games provide one complete fenced html document including embedded CSS and JavaScript, not truncated snippets. Direct export requests are handled by the app.' }, ...context, ...history],
           onProgress: ({ text, phase, detail }) => {
             if (
               controller.signal.aborted ||
@@ -593,6 +606,15 @@ export function App() {
           },
         },
       );
+      if (controller.signal.aborted || requests.current.get(cardId) !== controller) return;
+      let saveMessage = '';
+      if (requestsHtmlExport(prompt)) {
+        try {
+          const artifact = conversationHtml([{ type: 'input', text: prompt }, { type: 'output', text: result.text }]);
+          const saved = await saveHtmlToFolder(artifact);
+          saveMessage = `Saved ${artifact.filename} to your connected PC folder: ${saved}.`;
+        } catch (error) { saveMessage = error instanceof Error ? error.message : 'The generated HTML could not be saved to your PC.'; }
+      }
       complete({
         status: "idle",
         history: [
@@ -607,12 +629,13 @@ export function App() {
               minute: "2-digit",
             }),
           },
+          ...(saveMessage ? [{ id: crypto.randomUUID(), text: saveMessage, type: 'system' as const, timestamp }] : []),
         ],
         tokensUsed: card.tokensUsed + result.tokens,
         cpuPercent: 0,
         routedModel: result.model,
         modelSource: "live",
-        lastAction: `Response from ${result.model}`,
+        lastAction: saveMessage || `Response from ${result.model}`,
       });
     };
     void run().catch((error) => {

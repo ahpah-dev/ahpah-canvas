@@ -8,6 +8,7 @@ import {
   Settings,
 } from "lucide-react";
 import { supportsLocalBridge } from "../utils/gateways";
+import { FolderConnection } from './FolderConnection';
 
 interface NavbarProps {
   currentView: "site" | "canvas" | "code";
@@ -117,6 +118,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <span className="cw-nav-local">{supportsLocalBridge() ? "LOCAL" : "BROWSER"}</span>
       </div>
       <nav aria-label="Workspace navigation">
+        <FolderConnection />
         {currentView === "canvas" && <>
         <button onClick={onOpenMemory} aria-label="Project memory">
           <Database size={14} />
