@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { clearKiloRouteHealth, verifiedFreeFallbacks, fastReasoning, markKiloRouteUnhealthy } from "../src/utils/kiloRecovery.ts";
+import { clearKiloRouteHealth, verifiedFreeFallbacks, fastReasoning, markKiloRouteUnhealthy, isKiloRouteHealthy } from "../src/utils/kiloRecovery.ts";
 import { sendGatewayPrompt } from "../src/utils/gateways.ts";
 import { GatewayServiceError } from "../src/utils/gatewayErrors.ts";
 import { AUTO_FREE_FIRST_ANSWER_MS } from "../src/utils/gatewayPolicy.ts";
@@ -236,6 +236,50 @@ test('manual Kilo coding routes are not silently replaced when they repeat', asy
   });
   const result = await runEngineeringAgent({ project: createStarterProject(), goal: 'Inspect files', providerId: 'kilo', signal: new AbortController().signal, send: request => sendGatewayPrompt('kilo', request.prompt, { ...config, kiloModel: 'chosen-model' }, request) });
   assert.equal(calls, 3);
+  assert.match(result.error!, /repeated actions/);
+  assert.equal(result.activities.some(activity => activity.title === 'Recovering a repeating Kilo route'), false);
+});
+
+test('an explicitly selected zero-priced Kilo model recovers a loop without losing staged source', async (t) => {
+  const selected = 'fixture/nemotron-free';
+  const requests: string[] = [];
+  let replacementCalls = 0;
+  const content = 'const value = 2;';
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [free(selected, 20), free('replacement/free', 10), { id: 'paid/replacement', pricing: { prompt: 1, completion: 1 } }] });
+    const payload = JSON.parse(init.body as string); requests.push(payload.model);
+    let actions: unknown[];
+    if (payload.model === selected) {
+      actions = requests.length === 1
+        ? [{ tool: 'plan', steps: ['Inspect', 'Implement', 'Review'] }, { tool: 'read_file', path: 'app.js' }, { tool: 'write_file', path: 'app.js', content }]
+        : [{ tool: 'read_file', path: 'app.js' }];
+    } else {
+      assert.equal(payload.model, 'replacement/free');
+      assert.ok(JSON.stringify(payload.messages).includes(content));
+      actions = ++replacementCalls <= 2 ? [{ tool: 'read_file', path: 'app.js' }]
+        : [{ tool: 'finish', summary: 'Updated value', review: 'Reviewed actual source. Tests not run.' }];
+    }
+    return json({ model: payload.model, choices: [{ message: { content: JSON.stringify({ actions }) } }] });
+  });
+  const chosen = { ...config, kiloModel: selected };
+  const result = await runEngineeringAgent({ project: { ...createStarterProject(), files: [{ path: 'app.js', content: 'const value = 1;' }] }, goal: 'Change value to 2', providerId: 'kilo', signal: new AbortController().signal, send: request => sendGatewayPrompt('kilo', request.prompt, chosen, request) });
+  assert.equal(result.completed, true);
+  assert.equal(result.error, undefined);
+  assert.equal(result.changeSet.changes[0].after, content);
+  assert.deepEqual(requests, [selected, selected, selected, selected, 'replacement/free', 'replacement/free', 'replacement/free']);
+  assert.equal(chosen.kiloModel, selected);
+  assert.equal(isKiloRouteHealthy(selected), false);
+});
+
+test('a selected paid coding model is never eligible for loop failover', async (t) => {
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith('/models')) return json({ data: [{ id: 'selected/paid', pricing: { prompt: 1, completion: 1 } }, free('other/free')] });
+    assert.equal(JSON.parse(init.body as string).model, 'selected/paid'); requests++;
+    return json({ model: 'selected/paid', choices: [{ message: { content: JSON.stringify({ actions: [{ tool: 'list_files' }] }) } }] });
+  });
+  const result = await runEngineeringAgent({ project: createStarterProject(), goal: 'Inspect files', providerId: 'kilo', signal: new AbortController().signal, send: request => sendGatewayPrompt('kilo', request.prompt, { ...config, kiloModel: 'selected/paid' }, request) });
+  assert.equal(requests, 3);
   assert.match(result.error!, /repeated actions/);
   assert.equal(result.activities.some(activity => activity.title === 'Recovering a repeating Kilo route'), false);
 });

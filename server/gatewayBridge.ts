@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { once } from "node:events";
-import { normalizeProviderUrl } from "../src/utils/providerConfig.ts";
+import { normalizeOmniRouteUrl, normalizeProviderUrl } from "../src/utils/providerConfig.ts";
 import {
   CATALOG_TIMEOUT_MS,
   COMPLETION_TIMEOUT_MS,
@@ -68,7 +68,7 @@ export async function gatewayMiddleware(
             request.headers["x-omniroute-url"] || "http://localhost:20128/v1",
           );
     let normalizedBase: string;
-    try { normalizedBase = normalizeProviderUrl(base); }
+    try { normalizedBase = match[1] === 'omniroute' ? normalizeOmniRouteUrl(base) : normalizeProviderUrl(base); }
     catch (error) {
       json(400, error instanceof Error ? error.message : "Invalid provider URL.");
       return;

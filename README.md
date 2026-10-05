@@ -48,7 +48,7 @@ npm run build
 npm run preview
 ```
 
-Start OmniRoute or another local model server separately.
+Use **Settings → One-click OmniRoute setup** to install and start OmniRoute locally. Other local model servers can be started separately.
 
 ### Connect Codex with your ChatGPT plan
 
@@ -67,6 +67,8 @@ Native shell/app tools are disabled, and coding threads use read-only sessions i
 3. Describe a concrete goal, such as “Add a search field and a useful empty state.” Start the agent and watch its plan and actual file actions.
 4. Review the proposed changes. Apply the files you want, keep your manual edits when a conflict is detected, or discard a proposal. **Undo** restores an applied change when the current files still match it.
 5. Open **Preview** to inspect the project. Download a ZIP when you want to continue in another editor.
+
+The Code workspace saves edits in this browser. Use **Save to PC** to copy the current project into `code/<project-name>-<id>/` under your connected folder. If no folder is connected yet, the files stay queued on this device and save when you connect one. Unreviewed agent changes are excluded. Existing PC files that AhPah has not saved before are preserved and reported as conflicts.
 
 The agent operates on the project files held by this workspace. It can list, read, search, write, replace text, and delete files through validated app tools. Writes and deletions are staged for review. A run has a bounded iteration count and deadline; **Stop** cancels the model request and preserves work already staged.
 
@@ -112,6 +114,14 @@ Open **Settings → Connections** from either workspace. Custom profiles are und
 
 Enter your gateway's OpenAI compatible base URL, such as `http://localhost:20128/v1`, and its API key if required. Load the live catalog, choose a model, and save your configuration.
 
+**One-click OmniRoute setup** installs the official `omniroute@latest` package if missing, starts or reuses the standard local gateway, loads its current catalog, checks real coding actions and saves a working concrete free route. Remote gateways and custom ports use your existing deployment. If the gateway requires an API key, enter that gateway key in Settings. This is separate from provider account credentials managed inside OmniRoute.
+
+Setup checks up to six current free text routes, trying different providers first and skipping a provider's other models when its credentials or quota are unavailable. It excludes virtual routers, paid models and retired models. **Load live models** refreshes the catalog; it does not claim that every listed provider works. Exact model IDs can be imported manually and stay selected when the catalog is refreshed. Automatic configuration preserves explicitly selected paid or price-unverified models.
+
+OmniRoute coding requests stream answers and declare Canvas's real file, search, edit and command-proposal tools. Native function calls are converted into validated Canvas actions with the same staging and human command approval rules. Existing free automatic selections such as `auto/coding:free` resolve to concrete free catalog routes, can fall back across providers and keep the working route during a coding run. Manually selected models are never silently replaced.
+
+**OpenCode Free needs no account API key.** Its upstream requires a compatible tool-carrying request. Canvas supplies the coding tools, and gateways started by this app also receive OmniRoute's official placeholder-tool configuration for dashboard checks. A previously rejected connection may remain in cooldown; check its status in **OmniRoute → Providers** before retrying. Other providers may require sign-in, keys, local software or a browser runtime. See the [maintainer's prerequisites explanation](https://github.com/diegosouzapw/OmniRoute/discussions/15232) and [OpenCode request contract guidance](https://github.com/diegosouzapw/OmniRoute/discussions/14139).
+
 ### Kilo AI Gateway
 
 The default route is `kilo-auto/free`. Load Kilo's current catalog to choose another supported text model. Paid models require the credentials and credits specified by Kilo; availability and rate limits are controlled by the provider.
@@ -120,7 +130,9 @@ Auto Free waits up to 30 seconds for the first answer and can try up to three ro
 
 **Verify Auto Free** and automatic setup check structured coding actions instead of accepting a plain “READY” reply. Coding runs keep the effective model when the live catalog confirms it is free. Malformed complete coding replies and repeated actions can switch to another verified free route while keeping the goal, real tool results, and current source. Recovery is bounded; if no route makes progress, the run stops early and retains staged files. Identical rewrites preserve source review, and repeated exports of the same source reuse the confirmed delivery result.
 
-Directly selected free Kilo coding models use their catalog-advertised instant or low-reasoning variant when available. If Auto Free's effective model exhausts the token budget without producing an answer and offers a verified free instant mode, recovery can retry that exact model with thinking disabled before trying another route. The same conversation and token ceiling are preserved; partial answers, paid selections, and cancellation are not silently replaced.
+Directly selected free Kilo coding models use their catalog-advertised instant or low-reasoning variant when available. If a selected coding model repeats actions without progress and the live catalog confirms zero pricing, the run can switch to another verified free route without changing the saved selection. The replacement keeps the goal, real tool results and staged source, and gets a fresh inspection before repetition detection resumes. Routes that loop are skipped by Auto Free for five minutes in the current session. At most two loop recoveries are allowed; paid and price-unverified selections never qualify.
+
+If Auto Free's effective model exhausts the token budget without producing an answer and offers a verified free instant mode, recovery can retry that exact model with thinking disabled before trying another route. The same conversation and token ceiling are preserved; partial answers, paid selections, and cancellation are not silently replaced.
 
 ### Custom API providers
 

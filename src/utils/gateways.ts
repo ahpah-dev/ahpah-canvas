@@ -1,9 +1,11 @@
-import { sortModelCatalog } from "./modelCatalog.ts";
+import { isAutomaticModel, isFreeModel, sortModelCatalog } from "./modelCatalog.ts";
 import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS } from "./gatewayPolicy.ts";
 import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
 import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
-import { normalizeCustomProviders, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
+import { normalizeCustomProviders, normalizeOmniRouteUrl, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
+import { omniCodingTools, omniToolActions } from './omniRouteTools.ts';
+import { freeModelCandidates, omniGatewayAuthFailure, omniModelProvider, omniRouteErrorMessage, unavailableOmniProvider } from './omniRoutePolicy.ts';
 export type { CustomProvider, GatewayTransport } from "./providerConfig.ts";
 
 export type GatewayModel = {
@@ -51,7 +53,7 @@ export function gatewayTransport(config?: GatewayConfig): "bridge" | "direct" {
 function endpoint(provider: "omniroute" | "kilo" | "custom", config?: GatewayConfig, custom?: CustomProvider): { base: string; headers: Record<string, string> } {
   const direct = gatewayTransport(config) === "direct";
   const baseUrl = provider === "kilo" ? KILO_UPSTREAM
-    : normalizeProviderUrl(provider === "custom" ? custom?.baseUrl || "" : config!.omniRouteUrl);
+    : provider === 'custom' ? normalizeProviderUrl(custom?.baseUrl || '') : normalizeOmniRouteUrl(config!.omniRouteUrl);
   if (direct && typeof window !== "undefined" && window.location?.protocol === "https:" && baseUrl.startsWith("http:"))
     throw new Error("This HTTPS site needs an HTTPS API URL. For a local HTTP provider, run the app locally with npm run dev.");
   return {
@@ -159,7 +161,7 @@ async function jsonRequest(
   }
   if (!response.ok) {
     throw new GatewayServiceError(
-      `HTTP ${response.status}: ${body?.error?.message || body?.message || "Gateway request failed."}`,
+      `HTTP ${response.status}: ${typeof body?.error === 'string' ? body.error : body?.error?.message || body?.message || "Gateway request failed."}`,
       response.status,
     );
   }
@@ -188,25 +190,21 @@ export async function listOmniRouteModels(
   signal?: AbortSignal,
 ): Promise<GatewayModel[]> {
   const route = endpoint("omniroute", config);
-  const result = await jsonRequest(
-    `${route.base}/models?prefix=alias`,
-    {
-      signal,
-      cache: "no-store",
-      headers: {
-        ...authHeaders(config.omniRouteKey),
-        ...route.headers,
+  try {
+    const result = await jsonRequest(
+      `${route.base}/models?prefix=alias`,
+      {
+        signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
+        cache: "no-store",
+        headers: { ...authHeaders(config.omniRouteKey), ...route.headers },
       },
-    },
-  );
-  return Array.isArray(result.data)
-    ? sortModelCatalog(
-        result.data.filter(
-          (model: GatewayModel | null) =>
-            model && typeof model.id === "string" && model.id.trim(),
-        ),
-      )
-    : [];
+    );
+    if (!Array.isArray(result.data)) throw new Error('OmniRoute did not return a model catalog. Use its API base URL ending in /v1.');
+    return sortModelCatalog(result.data.filter((model: GatewayModel | null) => model && typeof model.id === 'string' && model.id.trim()));
+  } catch (error) {
+    if (error instanceof Error) Object.defineProperty(error, 'message', { value: redactProviderError(error.message, [config.omniRouteKey, config.kiloKey, ...(config.customProviders || []).map(provider => provider.apiKey)]), configurable: true });
+    throw error;
+  }
 }
 
 export async function listKiloModels(
@@ -214,7 +212,7 @@ export async function listKiloModels(
   config?: GatewayConfig,
 ): Promise<GatewayModel[]> {
   const result = await jsonRequest(`${endpoint("kilo", config).base}/models`, {
-    signal,
+    signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
     cache: "no-store",
   });
   return Array.isArray(result.data)
@@ -254,7 +252,7 @@ export async function sendGatewayPrompt(
     onProgress?: (progress: GatewayProgress) => void;
     firstAnswerTimeoutMs?: number;
     providerId?: string;
-    routing?: { model?: string; excludedModels: string[]; automatic?: boolean };
+    routing?: { model?: string; excludedModels: string[]; automatic?: boolean; recoverable?: boolean };
     validateResponse?: (text: string) => void;
   } = {},
 ): Promise<{ text: string; model: string; tokens: number }> {
@@ -272,7 +270,8 @@ export async function sendGatewayPrompt(
     AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
   ]);
   const maxTokens = options.maxTokens ?? (isKilo ? 8192 : 2048);
-  const automatic = isKilo && model === "kilo-auto/free";
+  const omniAutomatic = provider === 'omniroute' && isAutomaticModel({ id: model }) && isFreeModel({ id: model });
+  let automatic = (isKilo && model === "kilo-auto/free") || omniAutomatic;
   if (options.routing) options.routing.automatic = automatic;
   const firstAnswerLimit = Number.isFinite(options.firstAnswerTimeoutMs)
     ? Math.max(1, Math.min(AUTO_FREE_FIRST_ANSWER_MS, options.firstAnswerTimeoutMs!))
@@ -282,29 +281,44 @@ export async function sendGatewayPrompt(
   let catalogModels: GatewayModel[] = [];
   let fallbackModels: GatewayModel[] | undefined;
   const excluded = new Set([model, ...(options.routing?.excludedModels || [])]);
+  const unavailableProviders = new Set<string>();
   const nextFreeModel = async () => {
     if (!fallbackModels) {
       try {
-        catalogModels = await listKiloModels(
+        catalogModels = await (omniAutomatic ? listOmniRouteModels(config,
+          AbortSignal.any([signal, AbortSignal.timeout(CATALOG_TIMEOUT_MS)])) : listKiloModels(
           AbortSignal.any([signal, AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
           config,
-        );
-        fallbackModels = verifiedFreeFallbacks(catalogModels);
-      } catch {
+        ));
+        fallbackModels = omniAutomatic ? freeModelCandidates(catalogModels) : verifiedFreeFallbacks(catalogModels);
+      } catch (error) {
         signal.throwIfAborted();
+        if (omniAutomatic) throw error;
         fallbackModels = [];
       }
     }
-    return fallbackModels.find((item) => !excluded.has(item.id) && isKiloRouteHealthy(item.id));
+    return fallbackModels.find((item) => !excluded.has(item.id) && (omniAutomatic ? !unavailableProviders.has(omniModelProvider(item)) : isKiloRouteHealthy(item.id)));
   };
+  if (omniAutomatic) {
+    const fallback = await nextFreeModel();
+    if (!fallback) throw new Error('OmniRoute Auto Free has no current concrete free text route. Load live models in Settings and connect a free provider in OmniRoute.');
+    target = fallback;
+  }
   if (isKilo && !automatic && options.validateResponse) {
     await nextFreeModel();
     const selected = catalogModels.find(item => item.id === model && hasVerifiedFreePricing(item));
     if (selected) target = selected;
+    if (options.routing) {
+      // An explicit model stays selected until the agent detects a real loop.
+      // Only live zero-price evidence authorizes a run-local free fallback.
+      options.routing.recoverable = !!selected;
+      automatic = !!selected && options.routing.excludedModels.includes(model);
+      options.routing.automatic = automatic;
+    }
   }
   if (automatic && options.routing?.model && !excluded.has(options.routing.model)) {
     await nextFreeModel();
-    const preferred = fallbackModels?.find(item => item.id === options.routing!.model && !excluded.has(item.id) && isKiloRouteHealthy(item.id));
+    const preferred = fallbackModels?.find(item => item.id === options.routing!.model && !excluded.has(item.id) && (omniAutomatic || isKiloRouteHealthy(item.id)));
     if (preferred) target = preferred;
   }
   if (automatic && target.id === model && (!isKiloRouteHealthy(model) || options.routing?.excludedModels.includes(model))) {
@@ -323,7 +337,8 @@ export async function sendGatewayPrompt(
       ...route.headers,
     },
   };
-  for (let attempt = 0; attempt < (automatic ? 3 : 1); attempt++) {
+  const attempts = omniAutomatic ? 6 : automatic ? 3 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     signal.throwIfAborted();
     const local = new AbortController();
     const attemptSignal = AbortSignal.any([signal, local.signal]);
@@ -339,7 +354,7 @@ export async function sendGatewayPrompt(
       detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : `Waiting for ${custom?.name || (isKilo ? "Kilo" : "OmniRoute")}`,
     });
     try {
-      const reasoning = automatic || (isKilo && options.validateResponse && hasVerifiedFreePricing(target)) ? fastReasoning(target) : undefined;
+      const reasoning = isKilo && (automatic || (options.validateResponse && hasVerifiedFreePricing(target))) ? fastReasoning(target) : undefined;
       const result = await jsonRequest(`${base}/chat/completions`, {
         ...request,
         signal: attemptSignal,
@@ -349,13 +364,14 @@ export async function sendGatewayPrompt(
             ...(options.messages || []),
             { role: "user", content: prompt },
           ],
-          stream: custom ? custom.stream : isKilo,
+          stream: custom ? custom.stream : true,
           max_tokens: maxTokens,
+          ...(provider === 'omniroute' && options.validateResponse ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
           ...(reasoning ? { reasoning } : {}),
         }),
       }, (progress) => {
         if (progress.model) resolvedAttemptModel = progress.model;
-        if (progress.text.trim()) {
+        if (progress.text.trim() || (options.validateResponse && progress.phase === 'answer')) {
           hasAnswer = true;
           clearTimeout(timer);
         }
@@ -390,7 +406,9 @@ export async function sendGatewayPrompt(
         typeof message.content !== "string" && !Array.isArray(message.content)
       )
         throw new Error(`${resolvedModel} returned an invalid completion format.`);
-      const text = answerText(message?.content);
+      if (provider === 'omniroute' && options.validateResponse && message.tool_calls?.length && choice?.finish_reason === 'length')
+        throw new EmptyCompletionError(`${resolvedModel} reached the ${maxTokens.toLocaleString()} token limit before completing its coding tools.`, resolvedModel, 'token_limit');
+      const text = (provider === 'omniroute' && options.validateResponse ? omniToolActions(message.tool_calls) : undefined) ?? answerText(message?.content);
       const refusal = answerText(message?.refusal);
       if (choice?.finish_reason === "content_filter")
         throw new Error(
@@ -398,7 +416,7 @@ export async function sendGatewayPrompt(
         );
       if (refusal.trim()) return { text: refusal, model: resolvedModel, tokens };
       if (text.trim()) {
-        if (options.validateResponse && automatic) {
+        if (options.validateResponse && (automatic || provider === 'omniroute')) {
           try { options.validateResponse(text); }
           catch (failure) {
             throw new UnusableCodingResponseError(`${resolvedModel} returned unusable coding actions: ${failure instanceof Error ? failure.message : 'Invalid response'}`, resolvedModel);
@@ -441,12 +459,16 @@ export async function sendGatewayPrompt(
       clearTimeout(timer);
       signal.throwIfAborted();
       const error = local.signal.aborted ? local.signal.reason : caught;
+      if (provider === 'omniroute' && error instanceof Error)
+        Object.defineProperty(error, 'message', { value: omniRouteErrorMessage(error.message), configurable: true });
       if (error instanceof Error && key && error.message.includes(key))
         Object.defineProperty(error, "message", { value: redactProviderError(error.message, [key]), configurable: true });
       const recoverable = error instanceof UnusableCodingResponseError || error instanceof NoAnswerError || error instanceof EmptyCompletionError ||
-        (error instanceof GatewayServiceError && [404, 408, 410, 500, 502, 503, 504].includes(error.status || 0));
+        (error instanceof GatewayServiceError && [404, 408, 410, 500, 502, 503, 504].includes(error.status || 0)) ||
+        (omniAutomatic && error instanceof Error && !omniGatewayAuthFailure(error.message) &&
+          (unavailableOmniProvider(error.message) || (error instanceof GatewayServiceError && [401, 403, 429].includes(error.status || 0))));
       if (!automatic || (hasAnswer && !(error instanceof UnusableCodingResponseError)) || !recoverable) throw error;
-      if (error instanceof EmptyCompletionError && error.reason === 'token_limit' && target.id === model && attempt < 2) {
+      if (isKilo && error instanceof EmptyCompletionError && error.reason === 'token_limit' && target.id === model && attempt < 2) {
         await nextFreeModel();
         const instant = fallbackModels?.find(item => item.id === error.model && !excluded.has(item.id)
           && fastReasoning(item)?.enabled === false && isKiloRouteHealthy(item.id));
@@ -465,11 +487,18 @@ export async function sendGatewayPrompt(
       excluded.add(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
       if (error instanceof UnusableCodingResponseError) excluded.add(error.model);
       if (options.routing) options.routing.excludedModels = [...new Set([...options.routing.excludedModels, ...excluded])];
-      markKiloRouteUnhealthy(target.id);
-      markKiloRouteUnhealthy(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
-      if (error instanceof UnusableCodingResponseError) markKiloRouteUnhealthy(error.model);
-      if (attempt >= 2) throw error;
-      options.onProgress?.({ text: "", phase: "retrying", detail: error instanceof UnusableCodingResponseError ? `${label} returned unusable coding actions. Finding another current free model` : `${label} did not answer. Finding another current free model` });
+      if (omniAutomatic && error instanceof Error && (unavailableOmniProvider(error.message) || /429|quota|only be used from within OpenCode/i.test(error.message))) {
+        unavailableProviders.add(omniModelProvider(target));
+        for (const item of fallbackModels || []) if (unavailableProviders.has(omniModelProvider(item))) excluded.add(item.id);
+        if (options.routing) options.routing.excludedModels = [...new Set([...options.routing.excludedModels, ...excluded])];
+      }
+      if (isKilo) {
+        markKiloRouteUnhealthy(target.id);
+        markKiloRouteUnhealthy(error instanceof EmptyCompletionError ? error.model : resolvedAttemptModel);
+        if (error instanceof UnusableCodingResponseError) markKiloRouteUnhealthy(error.model);
+      }
+      if (attempt >= attempts - 1) throw error;
+      options.onProgress?.({ text: "", phase: "retrying", detail: `${label} could not complete this request. Finding another current free model` });
       const fallback = await nextFreeModel();
       if (!fallback) throw error;
       target = fallback;

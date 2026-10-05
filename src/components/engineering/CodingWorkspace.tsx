@@ -6,7 +6,7 @@ import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRunt
 import { discoverProjectExecution, runProjectCommand } from '../../utils/projectExecution';
 import { useDialogFocus } from '../../utils/useDialogFocus';
 import { htmlExportRequest, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
-import { saveHtmlToFolder } from '../../utils/connectedFolder';
+import { autoSaveFilesToFolder, saveHtmlToFolder } from '../../utils/connectedFolder';
 import './engineering.css';
 
 export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean; canvasProject?: EngineeringProject; canvasCommands?: string[]; onCanvasProjectChange?: (project: EngineeringProject, signal: AbortSignal) => Promise<string> }
@@ -76,6 +76,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   });
   const [phase, setPhase] = useState<AgentPhase | null>(initial.pending ? 'ready' : null);
   const [busy, setBusy] = useState(false);
+  const [folderSaving, setFolderSaving] = useState(false);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [plan, setPlan] = useState<string[]>(initial.pending?.plan ?? []);
   const [runDetail, setRunDetail] = useState('');
@@ -265,6 +266,25 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not download the project.'); }
   };
 
+  const saveProjectToFolder = async () => {
+    if (folderSaving || busy || executionBusy) return;
+    const snapshot = projectRef.current;
+    if (!snapshot.files.length) { setNotice('This project has no files to save yet.'); return; }
+    setFolderSaving(true);
+    setNotice('Saving project files to your connected PC folder…');
+    try {
+      const slug = snapshot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'project';
+      const directory = `code/${slug}-${snapshot.id.slice(0, 8)}`;
+      const result = await autoSaveFilesToFolder(snapshot.files.map(file => ({ ...file, path: `${directory}/${file.path}` })));
+      if (!alive.current) return;
+      setNotice(result.saved
+        ? `Saved ${snapshot.files.length} project files to your PC in ${directory}.${pendingCount ? ' Proposed agent changes are still awaiting review.' : ''}`
+        : `${result.reason || 'Project files are queued on this device.'} Destination: ${directory}/`);
+    } catch (error) {
+      if (alive.current) setNotice(error instanceof Error ? error.message : 'Could not save the project to your connected folder.');
+    } finally { if (alive.current) setFolderSaving(false); }
+  };
+
   const saveProjectHtml = async (name?: string) => {
     const snapshot = projectRef.current;
     try {
@@ -398,13 +418,14 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
 
   return <div className="eng-workspace">
     <header className="eng-project-strip">
-      <div className="eng-project-heading"><span className="eng-project-mark"><Code2 size={18} /></span><div><span className="eng-eyebrow">ENGINEERING WORKSPACE</span><input aria-label="Project name" value={project.name} maxLength={100} onChange={event => commitProject({ ...projectRef.current, name: event.target.value || 'Untitled project', updatedAt: new Date().toISOString() })} /></div></div>
-      <div className="eng-project-status" title={storageError || 'This project is stored in your browser'}><span className={`eng-save-dot eng-save-${saveStatus}`} />{saveStatus === 'saving' ? 'Saving locally' : saveStatus === 'error' ? 'Download to keep work' : 'Saved in this browser'}</div>
+        <div className="eng-project-heading"><span className="eng-project-mark"><Code2 size={18} /></span><div><span className="eng-eyebrow">ENGINEERING WORKSPACE</span><input aria-label="Project name" value={project.name} maxLength={100} disabled={folderSaving} onChange={event => commitProject({ ...projectRef.current, name: event.target.value || 'Untitled project', updatedAt: new Date().toISOString() })} /></div></div>
+      <div className="eng-project-status" title={storageError || 'Project edits autosave in this browser. Use Save to PC to copy the source files into your connected folder.'}><span className={`eng-save-dot eng-save-${saveStatus}`} />{saveStatus === 'saving' ? 'Saving locally' : saveStatus === 'error' ? 'Download to keep work' : 'Saved in this browser'}</div>
       <div className="eng-project-actions">
-        <button className="eng-button eng-icon-mobile" aria-label="Import folder" title="Import folder" onClick={() => folderInput.current?.click()} disabled={busy || executionBusy}><FolderOpen size={14} /><span>Import folder</span></button>
+        <button className="eng-button eng-icon-mobile" aria-label="Import folder" title="Import folder" onClick={() => folderInput.current?.click()} disabled={busy || executionBusy || folderSaving}><FolderOpen size={14} /><span>Import folder</span></button>
         <button className="eng-button eng-icon-mobile" aria-label="Download ZIP" title="Download ZIP" onClick={() => downloadProject()}><Download size={14} /><span>Download ZIP</span></button>
-        <button className="eng-button eng-icon-mobile" aria-label="Save HTML to connected folder" title="Save HTML to connected PC folder" onClick={() => void saveProjectHtml()} disabled={!htmlEntries.length || busy || executionBusy}><FolderOpen size={14} /><span>Save HTML</span></button>
-        <button className="eng-button eng-icon-button" title="Start a new project" aria-label="Start a new project" onClick={() => setFileDialog('new')} disabled={busy || executionBusy}><Plus size={15} /></button>
+        <button className="eng-button eng-icon-mobile" aria-label="Save project to connected PC folder" title="Save project files to your connected PC folder" onClick={() => void saveProjectToFolder()} disabled={!projectFiles.length || busy || executionBusy || folderSaving}>{folderSaving ? <Loader2 className="eng-spin" size={14} /> : <FolderOpen size={14} />}<span>{folderSaving ? 'Saving…' : 'Save to PC'}</span></button>
+        <button className="eng-button eng-icon-mobile" aria-label="Save HTML to connected folder" title="Save HTML to connected PC folder" onClick={() => void saveProjectHtml()} disabled={!htmlEntries.length || busy || executionBusy || folderSaving}><FolderOpen size={14} /><span>Save HTML</span></button>
+        <button className="eng-button eng-icon-button" title="Start a new project" aria-label="Start a new project" onClick={() => setFileDialog('new')} disabled={busy || executionBusy || folderSaving}><Plus size={15} /></button>
       </div>
     </header>
 
@@ -412,7 +433,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
 
     <div className="eng-body">
       <aside className={`eng-files ${sidebarOpen ? 'eng-files-open' : ''}`} aria-label="Project files">
-        <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => setSidebarOpen(false)}><X size={14} /></button></div></div>
+        <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy || folderSaving}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }} disabled={folderSaving}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => setSidebarOpen(false)}><X size={14} /></button></div></div>
         <div className="eng-file-tree">
           <span className="eng-tree-root"><ChevronRight size={12} /> {project.name}</span>
           {projectFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} onClick={() => { setSelectedPath(file.path); setTab('code'); setSidebarOpen(false); }} title={file.path}><FileCode2 size={13} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) && <span className="eng-file-change-dot" title="Proposed change" />}</button>)}
@@ -433,12 +454,12 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
           <button className="eng-file-toggle" aria-label="Open file explorer" onClick={() => setSidebarOpen(true)}><Files size={14} /></button>
           {([{ id: 'code', label: 'Code', icon: Code2 }, { id: 'changes', label: 'Changes', icon: GitCompareArrows }, { id: 'preview', label: 'Preview', icon: Eye }, { id: 'terminal', label: 'Terminal', icon: Terminal }] as const).map(item => <button key={item.id} id={`eng-tab-${item.id}`} role="tab" tabIndex={tab === item.id ? 0 : -1} aria-selected={tab === item.id} aria-controls={`eng-panel-${item.id}`} className={tab === item.id ? 'eng-tab-active' : ''} onClick={() => setTab(item.id)}><item.icon size={14} />{item.label}{item.id === 'changes' && pendingCount > 0 && <span className="eng-count">{pendingCount}</span>}</button>)}
           <div className="eng-tab-spacer" />
-          <button className="eng-undo" onClick={undoAccepted} disabled={!undo.length || busy || executionBusy} title="Undo the last accepted change"><Undo2 size={13} /><span>Undo</span></button>
+          <button className="eng-undo" onClick={undoAccepted} disabled={!undo.length || busy || executionBusy || folderSaving} title="Undo the last accepted change"><Undo2 size={13} /><span>Undo</span></button>
         </nav>
 
         {tab === 'code' && <section id="eng-panel-code" role="tabpanel" aria-labelledby="eng-tab-code" className="eng-code-panel">
           <div className="eng-editor-bar"><span><FileCode2 size={13} />{activeFile?.path ?? 'No file selected'}</span><div>{activeFile && <><span>{lineCount} lines</span><button aria-label={`Delete ${activeFile.path}`} title="Delete selected file" onClick={() => setFileDialog('delete')}><Trash2 size={13} /></button></>}</div></div>
-          {activeFile ? <div className="eng-editor"><div className="eng-editor-gutter" aria-hidden="true">{gutterText}</div><textarea key={activeFile.path} aria-label={`Edit ${activeFile.path}`} spellCheck={false} wrap="off" value={activeFile.content} onChange={event => updateFile(event.target.value)} onScroll={event => { const gutter = event.currentTarget.previousElementSibling; if (gutter) gutter.scrollTop = event.currentTarget.scrollTop; }} onKeyDown={event => {
+          {activeFile ? <div className="eng-editor"><div className="eng-editor-gutter" aria-hidden="true">{gutterText}</div><textarea key={activeFile.path} aria-label={`Edit ${activeFile.path}`} spellCheck={false} wrap="off" value={activeFile.content} disabled={folderSaving} onChange={event => updateFile(event.target.value)} onScroll={event => { const gutter = event.currentTarget.previousElementSibling; if (gutter) gutter.scrollTop = event.currentTarget.scrollTop; }} onKeyDown={event => {
             if (event.key === 'Tab') { event.preventDefault(); const input = event.currentTarget; const start = input.selectionStart; const end = input.selectionEnd; updateFile(input.value.slice(0, start) + '  ' + input.value.slice(end)); requestAnimationFrame(() => { input.selectionStart = input.selectionEnd = start + 2; }); }
           }} /></div> : <div className="eng-panel-empty"><Code2 size={32} /><h2>Your project starts with a file.</h2><p>Create a source file, import a folder, or describe what you want the agent to build.</p><button className="eng-button eng-primary" onClick={() => setFileDialog('add')}><Plus size={14} />Create file</button></div>}
           <footer className="eng-editor-footer"><span>{activeFile?.path.split('.').pop()?.toUpperCase() ?? 'SOURCE'} <span>UTF-8</span></span><span>{canvasProject?.id === project.id ? 'Canvas edits sync to your folder · agent changes require review' : 'Direct edits save automatically · agent changes require review'}</span></footer>
@@ -446,9 +467,9 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
 
         {tab === 'changes' && <section id="eng-panel-changes" role="tabpanel" aria-labelledby="eng-tab-changes" className="eng-changes-panel">
           {pendingCount && pending ? <>
-            <div className="eng-review-header"><div><span className="eng-eyebrow">YOUR REVIEW, YOUR CONTROL</span><h2>{pendingCount} {pendingCount === 1 ? 'file change' : 'file changes'} proposed</h2><p>{pending.summary || 'The agent is staging changes. Your current files remain intact.'}</p></div><div><button className="eng-button" onClick={() => discardChanges()} disabled={busy || executionBusy}><X size={13} />Discard all</button><button className="eng-button eng-primary" onClick={() => acceptChanges(pending.changes)} disabled={busy || executionBusy}><Check size={14} />Accept all</button></div></div>
+            <div className="eng-review-header"><div><span className="eng-eyebrow">YOUR REVIEW, YOUR CONTROL</span><h2>{pendingCount} {pendingCount === 1 ? 'file change' : 'file changes'} proposed</h2><p>{pending.summary || 'The agent is staging changes. Your current files remain intact.'}</p></div><div><button className="eng-button" onClick={() => discardChanges()} disabled={busy || executionBusy || folderSaving}><X size={13} />Discard all</button><button className="eng-button eng-primary" onClick={() => acceptChanges(pending.changes)} disabled={busy || executionBusy || folderSaving}><Check size={14} />Accept all</button></div></div>
             <div className="eng-review-file-tabs">{pending.changes.map(change => <button key={change.path} className={activeChange?.path === change.path ? 'eng-review-file-active' : ''} onClick={() => setSelectedChangePath(change.path)}><span className={`eng-change-kind eng-change-${changeLabel(change).toLowerCase()}`}>{changeLabel(change)[0]}</span>{change.path}</button>)}</div>
-            {activeChange && <><div className="eng-change-toolbar"><span>{changeLabel(activeChange)} <strong>{activeChange.path}</strong></span><div><button className="eng-button" onClick={() => discardChanges([activeChange.path])} disabled={busy || executionBusy}>Discard file</button><button className="eng-button" onClick={() => acceptChanges([activeChange])} disabled={busy || executionBusy}><Check size={12} />Accept file</button></div></div><DiffPanel change={activeChange} /></>}
+            {activeChange && <><div className="eng-change-toolbar"><span>{changeLabel(activeChange)} <strong>{activeChange.path}</strong></span><div><button className="eng-button" onClick={() => discardChanges([activeChange.path])} disabled={busy || executionBusy || folderSaving}>Discard file</button><button className="eng-button" onClick={() => acceptChanges([activeChange])} disabled={busy || executionBusy || folderSaving}><Check size={12} />Accept file</button></div></div><DiffPanel change={activeChange} /></>}
             <details className="eng-source-review"><summary><ShieldCheck size={13} />Agent source review <span>Execution results are shown in Terminal</span></summary><p>{pending.review || 'Review will be available when the coding run finishes.'}</p></details>
             <footer className="eng-review-footer"><span>Edits made after the agent read a file are protected by conflict checks.</span><button onClick={() => downloadProject(true)}><Download size={12} />Download proposed ZIP</button></footer>
           </> : <div className="eng-panel-empty"><GitCompareArrows size={32} /><h2>{pending ? 'Your files are up to date.' : 'A clear view of every change.'}</h2><p>{pending ? pending.summary : 'Describe a goal. The agent inspects your project and proposes file changes here for you to review.'}</p>{pending?.review && <div className="eng-completed-review"><ShieldCheck size={15} /><p>{pending.review}</p></div>}<span className="eng-empty-note">Nothing is applied without your acceptance.</span></div>}
@@ -490,8 +511,8 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         {(model || phase) && <div className="eng-run-meta"><span className={`eng-phase-${phase ?? 'ready'}`}>{phase ? phaseLabel[phase] : 'Ready'}</span>{model && <span title={model}>{model}</span>}{tokens > 0 && <span>{tokens.toLocaleString()} tokens</span>}</div>}
         <form className="eng-composer" onSubmit={beginGoal}>
           <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? '20 steps · 10 min budget' : 'Read only'}</span></div>
-          <textarea aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-          <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
+          <textarea aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy || folderSaving} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+          <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy || folderSaving}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy || folderSaving}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
           <div className="eng-provider-model">{activeProvider?.model ? <><span className="eng-connection-dot" />{activeProvider.model}</> : <button type="button" onClick={onOpenSettings}>Choose a model in Settings <ExternalLink size={10} /></button>}</div>
         </form>
       </aside>

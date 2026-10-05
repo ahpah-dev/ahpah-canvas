@@ -31,6 +31,7 @@ import {
 } from "../../utils/gateways";
 import { CustomProvidersPanel } from "./CustomProvidersPanel";
 import { CodexConnectionPanel } from "./CodexConnectionPanel";
+import { OmniRouteSetupButton } from './OmniRouteSetupButton';
 import { useDialogFocus } from "../../utils/useDialogFocus";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import {
@@ -43,6 +44,7 @@ import { AppearancePanel } from "./AppearancePanel";
 import { ModelSelector } from "./ModelSelector";
 import {
   currentModelRecommendations,
+  isAutomaticModel,
   isFreeModel,
 } from "../../utils/modelCatalog";
 
@@ -54,6 +56,7 @@ interface SettingsModalProps {
   onAutoConfigured: (providers: ("omniroute" | "kilo")[]) => void;
   onAddCustomProvider: (providerId: string) => void;
   onConnectCodex: () => void;
+  onConnectOmniRoute: () => void;
 }
 
 type ConnectionState = "idle" | "checking" | "connected" | "verified" | "error";
@@ -107,6 +110,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onAutoConfigured,
   onAddCustomProvider,
   onConnectCodex,
+  onConnectOmniRoute,
 }) => {
   useDialogFocus(isOpen, onClose);
   const present = useDialogPresence(isOpen);
@@ -139,6 +143,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     () => supportsLocalBridge() && localStorage.getItem("ahpah_auto_setup_on_open") !== "false",
   );
   const [running, setRunning] = useState(false);
+  const [omniQuickRunning, setOmniQuickRunning] = useState(false);
   const [setup, setSetup] = useState<
     Partial<Record<"omniroute" | "kilo", SetupProgress>>
   >({});
@@ -148,9 +153,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const checkingCatalog = omniState === "checking" || kiloState === "checking";
   const setupController = useRef<AbortController | null>(null);
   const kiloCheckController = useRef<AbortController | null>(null);
+  const omniCheckController = useRef<AbortController | null>(null);
   const automaticallyStarted = useRef(false);
   const runAuto = useCallback(async () => {
-    if (setupController.current || checkingCatalog) return;
+    if (setupController.current || checkingCatalog || omniQuickRunning) return;
     const controller = new AbortController();
     setupController.current = controller;
     setRunning(true);
@@ -240,6 +246,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onAutoConfigured,
     onToggleSimulated,
     checkingCatalog,
+    omniQuickRunning,
     transport,
   ]);
   useEffect(() => {
@@ -251,6 +258,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => window.clearTimeout(timer);
   }, [isOpen, autoOnOpen, runAuto]);
   useEffect(() => () => setupController.current?.abort(), []);
+  useEffect(() => {
+    if (!isOpen) setupController.current?.abort();
+    return () => { omniCheckController.current?.abort(); omniCheckController.current = null; };
+  }, [isOpen, omniRouteUrl, omniRouteKey, transport]);
   useEffect(() => {
     return () => { kiloCheckController.current?.abort(); kiloCheckController.current = null; };
   }, [isOpen, kiloModel, kiloKey, transport]);
@@ -286,27 +297,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const checkOmniRoute = async () => {
+    if (running || omniQuickRunning || omniCheckController.current || !isOpen) return;
+    const controller = new AbortController();
+    omniCheckController.current = controller;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]);
     setOmniState("checking");
     setOmniError("");
     try {
-      const models = await listOmniRouteModels(config);
+      const models = await listOmniRouteModels(config, signal);
+      signal.throwIfAborted();
       if (!models.length)
         throw new Error("Gateway responded, but no models were returned.");
       setOmniModels(models);
-      if (
-        !omniRouteModel ||
-        !models.some((model) => model.id === omniRouteModel)
-      )
-        setOmniRouteModel(
-          currentModelRecommendations(models)[0]?.id || models[0].id,
+      if (!omniRouteModel) {
+        const freeModels = models.filter(isFreeModel);
+        const concreteFreeModels = freeModels.filter(
+          (model) => !isAutomaticModel(model),
         );
+        setOmniRouteModel(
+          currentModelRecommendations(concreteFreeModels)[0]?.id ||
+            concreteFreeModels[0]?.id ||
+            "",
+        );
+      }
       setOmniState("connected");
     } catch (error) {
+      if (controller.signal.aborted) return;
       setOmniState("error");
       setOmniError(
         error instanceof Error ? error.message : "Connection failed.",
       );
-    }
+    } finally { if (omniCheckController.current === controller) omniCheckController.current = null; }
   };
 
   const checkKilo = async () => {
@@ -484,7 +505,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   className="cw-primary-button"
-                  disabled={!supportsLocalBridge() || running || checkingCatalog}
+                  disabled={!supportsLocalBridge() || running || checkingCatalog || omniQuickRunning}
                   onClick={() => void runAuto()}
                 >
                   {running ? (
@@ -602,8 +623,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </section>
             {!supportsLocalBridge() && <div className="cw-hosted-connection-note"><strong>Choose a browser-compatible API</strong><p>This site has no gateway server. Custom HTTPS providers that allow browser access work here. Kilo and local HTTP providers need the local app.</p><a href="https://github.com/ahpah-dev/ahpah-canvas#start-locally" target="_blank" rel="noreferrer">Get the local app <ChevronDown size={12} /></a></div>}
+            <div className="mb-5"><OmniRouteSetupButton config={config} disabled={running || checkingCatalog} onRunningChange={setOmniQuickRunning} onConnected={result => {
+              setOmniRouteUrl(result.config.omniRouteUrl); setOmniRouteModel(result.config.omniRouteModel);
+              setOmniModels(result.models); setOmniState('verified'); setOmniError('');
+              setTransport('bridge'); onToggleSimulated(false); onConnectOmniRoute();
+            }} /></div>
             <fieldset
-              disabled={running || checkingCatalog}
+              disabled={running || checkingCatalog || omniQuickRunning}
               className="space-y-5"
             >
               <section className="cw-connection-mode">
@@ -665,6 +691,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     provider="OmniRoute"
                     models={omniModels}
                     value={omniRouteModel}
+                    disabled={running || checkingCatalog || omniQuickRunning}
+                    onRefresh={() => void checkOmniRoute()}
+                    refreshing={omniState === "checking"}
                     onChange={(value) => {
                       setOmniRouteModel(value);
                       setSaved(false);
@@ -693,7 +722,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       size={13}
                       className={omniState === "checking" ? "animate-spin" : ""}
                     />
-                    Test & load models
+                    Load live models
                   </button>
                 </div>
               </section>
@@ -743,6 +772,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     provider="Kilo"
                     models={kiloModels}
                     value={kiloModel}
+                    disabled={running || checkingCatalog || omniQuickRunning}
                     onChange={(value) => {
                       setKiloModel(value);
                       setSaved(false);
@@ -784,7 +814,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </section>
 
-              <CustomProvidersPanel providers={customProviders} config={config} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
+              <CustomProvidersPanel providers={customProviders} config={config} disabled={running || checkingCatalog || omniQuickRunning} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
                 try {
                   saveGatewayConfig(config);
                   setSaveError("");
@@ -850,7 +880,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={running}
+                  disabled={running || checkingCatalog || omniQuickRunning}
                   className="rounded-xl bg-violet-300 px-4 py-2.5 text-xs font-semibold text-slate-950 shadow-lg shadow-violet-300/10 transition hover:bg-violet-200"
                 >
                   Save changes

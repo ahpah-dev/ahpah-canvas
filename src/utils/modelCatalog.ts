@@ -33,11 +33,11 @@ export function isPaidModel(model: GatewayModel) {
 }
 
 export function isFreeModel(model: GatewayModel) {
-  if (
-    isPaidModel(model) ||
-    chargedPrices(model).some(([, price]) => priceAmount(price) === undefined)
-  )
-    return false;
+  if (isPaidModel(model)) return false;
+  // These are provider-side routers whose contract restricts each attempt to
+  // free routes; their virtual catalog rows may omit token pricing metadata.
+  if (/^auto\/.*:free$/i.test(model.id) || model.id === "auto/best-free" || model.id === "kilo-auto/free") return true;
+  if (chargedPrices(model).some(([, price]) => priceAmount(price) === undefined)) return false;
   return (
     model.isFree === true ||
     (priceAmount(model.pricing?.prompt) === 0 &&
@@ -63,7 +63,7 @@ export function isModelAvailable(model: GatewayModel, now = new Date()) {
 }
 
 export const isAutomaticModel = (model: GatewayModel) =>
-  /^(?:kilo-auto\/|auto\/)/i.test(model.id);
+  /^(?:kilo-auto\/|auto(?:\/|$))/i.test(model.id);
 const release = (model: GatewayModel) =>
   typeof model.created === "number" && Number.isFinite(model.created)
     ? model.created
@@ -101,9 +101,18 @@ export function currentModelRecommendations(models: GatewayModel[], now = new Da
     /^gpt-\d+(?:\.\d+)*-luna(?::free)?$/,
     /^glm-\d+(?:\.\d+)*(?::free)?$/,
   ].flatMap((family) => {
-    const match = sorted.find((model) =>
-      family.test(model.id.split("/").at(-1) || ""),
-    );
+    const match = sorted.filter(model => family.test(model.id.split('/').at(-1) || ''))
+      .sort((a, b) => {
+        // Some gateways omit release dates or stamp every model with the same
+        // import date. Compare advertised family versions in that case.
+        const versions = (model: GatewayModel) => (model.id.split('/').at(-1)?.match(/\d+(?:\.\d+)*/)?.[0] || '0').split('.').map(Number);
+        const av = versions(a); const bv = versions(b);
+        for (let index = 0; index < Math.max(av.length, bv.length); index++) {
+          const difference = (bv[index] || 0) - (av[index] || 0);
+          if (difference) return difference;
+        }
+        return release(b) - release(a);
+      })[0];
     return match ? [match] : [];
   });
   const seen = new Set(requested.map((model) => model.id));

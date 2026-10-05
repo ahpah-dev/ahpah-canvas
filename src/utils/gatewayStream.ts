@@ -25,13 +25,13 @@ export async function readGatewayStream(
   let finishReason: string | null = null;
   let hasChoice = false;
   let hasReasoning = false;
-  let hasTools = false;
+  const tools = new Map<number, { id: string; type: string; function: { name: string; arguments: string } }>();
   let done = false;
   let lastUpdate = 0;
   let lastPhase = "";
   let lastText = "";
   const emit = (force = false) => {
-    const phase = text ? "answer" : hasReasoning ? "reasoning" : "waiting";
+    const phase = text || tools.size ? "answer" : hasReasoning ? "reasoning" : "waiting";
     if (force || phase !== lastPhase || (text !== lastText && Date.now() - lastUpdate >= 100)) {
       onProgress?.({ text, phase, model });
       lastUpdate = Date.now();
@@ -65,7 +65,18 @@ export async function readGatewayStream(
     if (typeof delta.content === "string") text += delta.content;
     if (typeof delta.refusal === "string") refusal += delta.refusal;
     hasReasoning ||= !!(delta.reasoning || delta.reasoning_content || delta.reasoning_details?.length);
-    hasTools ||= !!delta.tool_calls?.length;
+    if (Array.isArray(delta.tool_calls)) {
+      for (const [position, part] of delta.tool_calls.entries()) {
+        const index = part?.index ?? position;
+        if (!Number.isSafeInteger(index) || index < 0 || index >= 8) throw new Error('The gateway returned too many coding tools.');
+        const call = tools.get(index) || { id: '', type: 'function', function: { name: '', arguments: '' } };
+        if (typeof part.id === 'string') call.id = part.id;
+        if (typeof part.function?.name === 'string') call.function.name += part.function.name;
+        if (typeof part.function?.arguments === 'string') call.function.arguments += part.function.arguments;
+        if (call.function.arguments.length > 280_000 || call.function.name.length > 100) throw new Error('The gateway returned oversized coding tools.');
+        tools.set(index, call);
+      }
+    }
     if (typeof choice.finish_reason === "string") finishReason = choice.finish_reason;
     emit();
   };
@@ -106,7 +117,7 @@ export async function readGatewayStream(
       model,
       usage,
       choices: hasChoice ? [{
-        message: { content: text, refusal, reasoning: hasReasoning, tool_calls: hasTools ? [{}] : [] },
+        message: { content: text, refusal, reasoning: hasReasoning, tool_calls: [...tools.entries()].sort(([a], [b]) => a - b).map(([, call]) => call) },
         finish_reason: finishReason,
       }] : [],
     };

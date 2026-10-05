@@ -26,6 +26,11 @@ export function normalizeProviderUrl(value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
+export function normalizeOmniRouteUrl(value: string): string {
+  const base = normalizeProviderUrl(value);
+  return new URL(base).pathname === '/' ? `${base}/v1` : base;
+}
+
 export function normalizeCustomProviders(value: unknown): CustomProvider[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();

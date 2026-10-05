@@ -7,9 +7,10 @@ import { ModelSelector } from "./ModelSelector";
 type Catalog = { models: GatewayModel[]; checking: boolean; error: string; loaded: boolean };
 const emptyCatalog: Catalog = { models: [], checking: false, error: "", loaded: false };
 
-export function CustomProvidersPanel({ providers, config, onChange, onUse }: {
+export function CustomProvidersPanel({ providers, config, disabled = false, onChange, onUse }: {
   providers: CustomProvider[];
   config: GatewayConfig;
+  disabled?: boolean;
   onChange: (providers: CustomProvider[]) => void;
   onUse: (provider: CustomProvider) => void;
 }) {
@@ -73,7 +74,7 @@ export function CustomProvidersPanel({ providers, config, onChange, onUse }: {
             <label><span>API base URL</span><input value={provider.baseUrl} placeholder="https://your-provider.example/v1" type="url" onChange={(event) => update(provider.id, { baseUrl: event.target.value })} /></label>
             <label className="cw-provider-key"><span>API key · optional Bearer token</span><div><input value={provider.apiKey} type={visibleKeys[provider.id] ? "text" : "password"} autoComplete="off" placeholder="Enter your provider key" onChange={(event) => update(provider.id, { apiKey: event.target.value })} /><button type="button" aria-label={`${visibleKeys[provider.id] ? "Hide" : "Show"} ${provider.name} API key`} onClick={() => setVisibleKeys((previous) => ({ ...previous, [provider.id]: !previous[provider.id] }))}>{visibleKeys[provider.id] ? <EyeOff size={15} /> : <Eye size={15} />}</button></div></label>
             <label><span>Exact model ID</span><input value={provider.model} placeholder="Load the catalog or enter a model ID" onChange={(event) => update(provider.id, { model: event.target.value })} /></label>
-            {catalog.models.length > 0 && <div className="cw-provider-catalog"><ModelSelector provider={`${provider.name} ${index + 1}`} models={catalog.models} value={provider.model} onChange={(model) => update(provider.id, { model })} /></div>}
+            {catalog.models.length > 0 && <div className="cw-provider-catalog"><ModelSelector provider={`${provider.name} ${index + 1}`} models={catalog.models} value={provider.model} disabled={disabled} refreshing={catalog.checking} onRefresh={() => void load(provider)} onChange={(model) => update(provider.id, { model })} /></div>}
           </div>
           {catalog.error && <p role="alert" className="cw-inline-error">{catalog.error}</p>}
           <div className="cw-provider-bottomline">

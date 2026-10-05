@@ -1,13 +1,15 @@
 import React from "react";
-import { ArrowRight, KeyRound, Radio, X, Zap } from "lucide-react";
+import { ArrowRight, KeyRound, X, Zap } from "lucide-react";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import { useDialogFocus } from "../../utils/useDialogFocus";
+import { OmniRouteSetupButton } from './OmniRouteSetupButton';
 
 interface OneClickSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
   onApplyOneClickSetup: () => void;
+  onOmniRouteConnected: () => void;
 }
 
 export const OneClickSetupModal: React.FC<OneClickSetupModalProps> = ({
@@ -15,6 +17,7 @@ export const OneClickSetupModal: React.FC<OneClickSetupModalProps> = ({
   onClose,
   onOpenSettings,
   onApplyOneClickSetup,
+  onOmniRouteConnected,
 }) => {
   const present = useDialogPresence(isOpen);
   useDialogFocus(isOpen, onClose);
@@ -60,22 +63,13 @@ export const OneClickSetupModal: React.FC<OneClickSetupModalProps> = ({
             <X size={18} />
           </button>
         </header>
-        <div className="space-y-4 p-6">
+        <div className="max-h-[calc(90vh-6rem)] space-y-4 overflow-y-auto p-6">
           <p className="text-sm leading-relaxed text-slate-300">
             Add your gateway details once. The model pickers will use the latest
             catalogs available from each service.
           </p>
           <div className="space-y-3">
-            <div className="flex gap-3 rounded-2xl border border-cyan-300/10 bg-cyan-300/[.04] p-4">
-              <Radio size={17} className="mt-0.5 shrink-0 text-cyan-200" />
-              <p className="text-xs leading-relaxed text-slate-300">
-                <strong className="text-white">OmniRoute</strong>
-                <br />
-                Run your gateway locally at{" "}
-                <code className="text-cyan-200">localhost:20128</code>, then
-                load its live model list in Settings.
-              </p>
-            </div>
+            <OmniRouteSetupButton onConnected={onOmniRouteConnected} onOpenSettings={() => { onOpenSettings(); onClose(); }} />
             <div className="flex gap-3 rounded-2xl border border-emerald-300/10 bg-emerald-300/[.035] p-4">
               <KeyRound
                 size={17}

@@ -42,9 +42,7 @@ test("discovery normalizes root URLs and tries only equivalent loopback addresse
   assert.deepEqual(
     candidates.map((candidate) => candidate.omniRouteUrl),
     [
-      "http://localhost:20128",
       "http://localhost:20128/v1",
-      "http://127.0.0.1:20128",
       "http://127.0.0.1:20128/v1",
     ],
   );
@@ -91,7 +89,7 @@ test("auto setup considers only free text routes, deduplicates IDs and orders ne
       ],
       "preferred/free",
     ).map((model) => model.id),
-    ["new/free", "old/free", "preferred/free", "auto/best-free", "zero-cost"],
+    ["new/free", "old/free", "preferred/free", "zero-cost"],
   );
   assert.equal(
     freeModelCandidates(
@@ -109,15 +107,15 @@ test("setup tries a fallback, verifies both providers, and leaves room for reaso
       return json({
         data: url.includes("/kilo/")
           ? [{ id: "kilo-auto/free" }]
-          : [{ id: "auto/best-free" }, { id: "current/free" }],
+          : [{ id: "first/free", created: 20 }, { id: "current/free", created: 10 }],
       });
     const payload = JSON.parse(init.body as string);
     attempts.push(payload.model);
     assert.equal(payload.max_tokens, 1024);
     assert.deepEqual(payload.messages, [
-      { role: "user", content: url.includes('/kilo/') ? KILO_CODING_PROBE : "Reply with the single word READY." },
+      { role: "user", content: KILO_CODING_PROBE },
     ]);
-    return payload.model === "auto/best-free"
+    return payload.model === "first/free"
       ? json({ error: { message: "Model unavailable" } }, 404)
       : ready();
   });
@@ -173,7 +171,7 @@ test('Kilo setup rejects a plain READY reply that cannot produce coding actions'
   assert.equal(result.config.kiloModel, config.kiloModel);
 });
 
-test("setup stops retries on an HTTP rate limit even if the message omits its status", async (t) => {
+test("OmniRoute provider rate limits do not stop independent provider probes", async (t) => {
   let omniProbes = 0;
   t.mock.method(globalThis, "fetch", async (url: string) => {
     if (url.includes("/models"))
@@ -193,7 +191,7 @@ test("setup stops retries on an HTTP rate limit even if the message omits its st
     new AbortController().signal,
     () => {},
   );
-  assert.equal(omniProbes, 1);
+  assert.equal(omniProbes, 2);
   assert.match(result.providers[0].detail, /HTTP 429/);
 });
 

@@ -320,10 +320,6 @@ export function App() {
 
   // 1-Click Free Setup Application
   const handleApplyOneClickSetup = () => {
-    stopAllRequests();
-    setCards(INITIAL_CARDS);
-    setConnections(INITIAL_CONNECTIONS);
-    setMemory(INITIAL_MEMORY);
     setCurrentView("canvas");
     setIsOneClickSetupOpen(false);
     if (loadAppearance().motion === "smooth")
@@ -892,6 +888,10 @@ export function App() {
         onClose={() => setIsOneClickSetupOpen(false)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onApplyOneClickSetup={handleApplyOneClickSetup}
+        onOmniRouteConnected={() => {
+          const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === 'omniroute')?.id || handleAddCard('agent', 'omniroute');
+          setIsSimulated(false); setCurrentView('canvas'); setIsOneClickSetupOpen(false); focusCard(id);
+        }}
       />
 
       <MemoryHubModal
@@ -925,6 +925,10 @@ export function App() {
       />
 
       <SettingsModal
+        onConnectOmniRoute={() => {
+          const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === 'omniroute')?.id || handleAddCard('agent', 'omniroute');
+          setIsSimulated(false); setCurrentView('canvas'); setIsSettingsOpen(false); focusCard(id);
+        }}
         onConnectCodex={() => {
           const id = cardsRef.current.find(card => card.type === "agent" && card.agentType === "codex")?.id || handleAddCard("agent", "codex");
           setIsSimulated(false);

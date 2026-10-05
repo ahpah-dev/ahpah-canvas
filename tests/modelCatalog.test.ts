@@ -79,6 +79,12 @@ test("text picker removes duplicates and models that only generate images", () =
     [{ id: "text-model" }],
   );
 });
+test('recommendations use the newest advertised family version when dates are absent', () => {
+  assert.deepEqual(currentModelRecommendations([
+    { id: 'route/glm-5.1' }, { id: 'route/glm-5.3' }, { id: 'route/glm-5.10' },
+    { id: 'route/gpt-5-luna' }, { id: 'route/gpt-6-luna' },
+  ]).map(model => model.id), ['route/gpt-6-luna', 'route/glm-5.10']);
+});
 test("retired and malformed-expiration models cannot be selected or recommended", () => {
   const today = new Date("2026-10-05T14:00:00Z");
   const catalog = [
@@ -122,7 +128,7 @@ test("free labels never override paid or invalid price metadata", () => {
   assert.equal(isFreeModel({ id: "explicit-free", isFree: true }), true);
   assert.equal(isFreeModel({ id: "auto/best-free" }), true);
 });
-test("free auto setup upgrades an old saved free model before falling back to its router", () => {
+test("free setup upgrades old selections and excludes virtual routers", () => {
   assert.deepEqual(
     freeModelCandidates(
       [
@@ -132,11 +138,11 @@ test("free auto setup upgrades an old saved free model before falling back to it
       ],
       "old/free",
     ).map((model) => model.id),
-    ["current/free", "old/free", "auto/best-free"],
+    ["current/free", "old/free"],
   );
   assert.match(catalogModelLabel(models[1]), /Paid/);
   assert.match(catalogModelLabel(models[4]), /Free/);
-  assert.equal(freeModelCandidates(models).length, 1);
+  assert.equal(freeModelCandidates(models).length, 0);
 });
 test("model catalogs bypass browser cache and expose current live releases", async (t) => {
   t.mock.method(

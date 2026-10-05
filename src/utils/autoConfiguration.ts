@@ -5,8 +5,10 @@ import {
   type GatewayConfig,
   type GatewayModel,
 } from "./gateways.ts";
-import { isFreeModel, sortModelCatalog } from "./modelCatalog.ts";
+import { isFreeModel } from "./modelCatalog.ts";
 import { parseAgentActions } from "./agentRuntime.ts";
+import { freeModelCandidates, omniGatewayAuthFailure, omniModelProvider, omniProviderHelp, unavailableOmniProvider } from './omniRoutePolicy.ts';
+export { freeModelCandidates } from './omniRoutePolicy.ts';
 
 export const KILO_CODING_PROBE = 'Coding action compatibility check: return only this JSON object, without Markdown or commentary: {"actions":[{"tool":"finish","summary":"READY","review":"No files changed. No commands run."}]}';
 export function validateKiloCodingProbe(text: string): void {
@@ -31,24 +33,43 @@ export type ProviderSetup = {
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Gateway request failed.";
 function redact(text: string, config: GatewayConfig) {
-  return [config.omniRouteKey, config.kiloKey]
+  return [config.omniRouteKey, config.kiloKey, ...(config.customProviders || []).map(provider => provider.apiKey)]
     .filter(Boolean)
     .reduce((value, key) => value.split(key).join("[redacted]"), text)
     .slice(0, 500);
 }
 
-export function freeModelCandidates(
-  models: GatewayModel[],
-  preferred = "",
-): GatewayModel[] {
-  return sortModelCatalog(models)
-    .filter(isFreeModel)
-    .sort((a, b) => {
-      const rank = (model: GatewayModel) =>
-        model.id === preferred ? 3 : model.id === "auto/best-free" ? 2 : 0;
-      return (b.created || 0) - (a.created || 0) || rank(b) - rank(a);
-    })
-    .slice(0, 6);
+export async function verifyOmniRouteModels(config: GatewayConfig, models: GatewayModel[], signal: AbortSignal, onProgress: (detail: string, attempt: number, total: number) => void) {
+  const candidates = freeModelCandidates(models, config.omniRouteModel);
+  if (!candidates.length) throw new Error('Catalog loaded, but no concrete free text route was found. Import a free model from OmniRoute or choose a model manually.');
+  const unavailable = new Set<string>();
+  const failures: string[] = [];
+  for (let index = 0; index < candidates.length; index++) {
+    signal.throwIfAborted();
+    const model = candidates[index];
+    const provider = omniModelProvider(model);
+    if (unavailable.has(provider)) continue;
+    onProgress(`Verifying coding actions with ${model.name || model.id}…`, index + 1, candidates.length);
+    try {
+      const result = await sendGatewayPrompt('omniroute', KILO_CODING_PROBE, { ...config, omniRouteModel: model.id }, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]), maxTokens: 1024, validateResponse: validateKiloCodingProbe,
+      });
+      signal.throwIfAborted();
+      validateKiloCodingProbe(result.text);
+      return { model, result };
+    } catch (error) {
+      signal.throwIfAborted();
+      const detail = redact(message(error), config);
+      failures.push(`${model.id}: ${detail}`);
+      const missing = unavailableOmniProvider(detail);
+      if (omniGatewayAuthFailure(detail)) throw new Error(`OmniRoute rejected its gateway API key. Update it in Connections. ${detail}`);
+      if (missing || /429|rate.?limit|quota|only be used from within OpenCode/i.test(detail)) unavailable.add(provider);
+      if (missing) unavailable.add(missing);
+      onProgress(`${model.id} is unavailable; checking the next free route. ${detail}`, index + 1, candidates.length);
+    }
+  }
+  const help = [...unavailable].map(omniProviderHelp).join(' ');
+  throw new Error(`OmniRoute is running, but coding verification did not complete. ${failures.slice(-3).join(' ')} ${help}`.trim());
 }
 
 export function discoveryCandidates(config: GatewayConfig): GatewayConfig[] {
@@ -66,18 +87,15 @@ export function discoveryCandidates(config: GatewayConfig): GatewayConfig[] {
     throw new Error("Use an HTTP or HTTPS URL without embedded credentials.");
   configured.search = "";
   configured.hash = "";
+  // A dashboard origin must resolve to its API before any auth checks.
+  if (configured.pathname === '/') configured.pathname = '/v1';
   const base = configured.href.replace(/\/+$/, "");
-  const candidates = [
-    base,
-    ...(configured.pathname === "/" ? [`${base}/v1`] : []),
-  ];
+  const candidates = [base];
   if (["localhost", "127.0.0.1"].includes(configured.hostname)) {
     const alias = new URL(configured);
     alias.hostname =
       configured.hostname === "localhost" ? "127.0.0.1" : "localhost";
     candidates.push(alias.href.replace(/\/+$/, ""));
-    if (alias.pathname === "/")
-      candidates.push(`${alias.href.replace(/\/+$/, "")}/v1`);
   }
   return [...new Set(candidates)].map((url) => ({
     ...config,
@@ -134,20 +152,21 @@ export async function autoConfigureGateways(
       }
       signal.throwIfAborted();
       if (!models.length) throw new Error(lastError);
-      const selectedId =
-        provider === "kilo" ? config.kiloModel : config.omniRouteModel;
+      if (provider === 'omniroute') {
+        const existing = models.find(model => model.id === config.omniRouteModel);
+        if (existing && !isFreeModel(existing)) throw new Error(`Catalog loaded. ${existing.name || existing.id} is not a verified free route. Your selection was kept; use it directly or click One-click OmniRoute setup to find a free route.`);
+        const { model, result } = await verifyOmniRouteModels(selected, models, signal, (detail, attempt, total) => emit({ provider, phase: 'testing', detail, attempt, total }));
+        const detail = `Verified coding actions via ${result.model}. Ready for coding goals.`;
+        emit({ provider, phase: 'ready', detail });
+        return { provider, models, verified: true, detail, config: { omniRouteUrl: selected.omniRouteUrl, omniRouteModel: model.id, omniRouteKey: config.omniRouteKey } };
+      }
+      const selectedId = config.kiloModel;
       const existingSelection = models.find((model) => model.id === selectedId);
       if (existingSelection && !isFreeModel(existingSelection))
         throw new Error(
           `Catalog loaded. ${existingSelection.name || existingSelection.id} is not a verified free route. Your selection was kept; use your provider credentials to send prompts directly.`,
         );
-      const candidates =
-        provider === "kilo"
-          ? models.filter(
-              (model) =>
-                model.id === (existingSelection?.id || "kilo-auto/free"),
-            )
-          : freeModelCandidates(models, config.omniRouteModel);
+      const candidates = models.filter(model => model.id === (existingSelection?.id || 'kilo-auto/free'));
       if (!candidates.length)
         throw new Error(
           "Catalog loaded, but no eligible free text route was found. Choose a model manually.",
@@ -164,34 +183,25 @@ export async function autoConfigureGateways(
         });
         const probeConfig = {
           ...selected,
-          ...(provider === "kilo"
-            ? { kiloModel: model.id }
-            : { omniRouteModel: model.id }),
+          kiloModel: model.id,
         };
         try {
           const result = await sendGatewayPrompt(
             provider,
-            provider === "kilo" ? KILO_CODING_PROBE : "Reply with the single word READY.",
+            KILO_CODING_PROBE,
             probeConfig,
-            { signal: timeout(20_000), maxTokens: 1024, firstAnswerTimeoutMs: 5_000, ...(provider === "kilo" ? { validateResponse: validateKiloCodingProbe } : {}) },
+            { signal: timeout(20_000), maxTokens: 1024, firstAnswerTimeoutMs: 5_000, validateResponse: validateKiloCodingProbe },
           );
           signal.throwIfAborted();
-          if (provider === "kilo") validateKiloCodingProbe(result.text);
-          const detail = provider === "kilo" ? `Verified coding actions via ${result.model}. Ready for coding goals.` : `Verified ${result.model}. Ready for real prompts.`;
+          validateKiloCodingProbe(result.text);
+          const detail = `Verified coding actions via ${result.model}. Ready for coding goals.`;
           emit({ provider, phase: "ready", detail });
           return {
             provider,
             models,
             verified: true,
             detail,
-            config:
-              provider === "kilo"
-                ? { kiloModel: model.id, kiloKey: config.kiloKey }
-                : {
-                    omniRouteUrl: selected.omniRouteUrl,
-                    omniRouteModel: model.id,
-                    omniRouteKey: config.omniRouteKey,
-                  },
+            config: { kiloModel: model.id, kiloKey: config.kiloKey },
           };
         } catch (error) {
           signal.throwIfAborted();
