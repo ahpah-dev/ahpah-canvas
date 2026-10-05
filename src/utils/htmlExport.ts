@@ -10,7 +10,7 @@ export function requestsHtmlCreation(prompt: string): boolean {
   return /\b(?:create|build|make|develop|generate|write|implement|finish|fix|update)\b/i.test(prompt) && /\b(?:html|game|website|webpage|web page|three\.js|arena shooter)\b/i.test(prompt) && !/\b(?:python|unity|unreal|godot|java|c\+\+)\b/i.test(prompt);
 }
 
-export const refusesHtmlSave = (prompt: string): boolean => /\b(?:do not|don't|never|without)\s+(?:automatically\s+)?(?:export|download|save|saving)\b/i.test(prompt);
+export const refusesHtmlSave = (prompt: string): boolean => /\b(?:do not|don't|never|without|no)\s+(?:automatically\s+)?(?:export(?:ing)?|download(?:ing)?|sav(?:e|ing)|writ(?:e|ing)|creat(?:e|ing)\s+(?:any\s+)?files?)\b/i.test(prompt);
 
 export function htmlFilename(name: string): string {
   // oxlint-disable-next-line no-control-regex -- Windows filenames cannot contain control characters.
