@@ -54,7 +54,9 @@ Open **Settings → Connections & auto setup → Connect with ChatGPT** in the l
 
 The model picker loads Codex's current catalog and selects its reported default. Choose a model, then **Use Codex in Canvas** to add/focus a coding card and leave demo mode. Codex is also available in the Code provider picker. Your ChatGPT plan's eligibility, model access, and shared usage limits apply. Catalog visibility is not proof of model entitlement.
 
-The local bridge uses official Codex app-server authentication and `codex exec` for model turns. Native shell/app tools are disabled, user configuration is ignored for generation, and requests use read-only, ephemeral sessions in an empty temporary folder. AhPah's validated project tools perform edits and retain its normal review/command approval flow. An older CLI that cannot support these flags needs to be updated. The GitHub Pages site cannot execute Codex on your PC; launch **Start AhPah.bat** to use this connection.
+The local bridge uses official Codex app-server authentication and native dynamic tool calls for coding. Each run keeps one ephemeral Codex thread: workspace tool requests go to AhPah's validated project runtime, and actual results return to that same thread. Codex's final prose is not parsed as an action envelope. This uses the app-server's experimental dynamic-tools interface and requires a current compatible Codex CLI. Free-text explanation requests use `codex exec` and include the current prompt with conversation context.
+
+Native shell/app tools are disabled, and coding threads use read-only sessions in an empty temporary folder. AhPah's registered workspace tools perform edits and retain its normal review/command approval flow. **Stop** and completed runs close their Codex session. The GitHub Pages site cannot execute Codex on your PC; launch **Start AhPah.bat** to use this connection.
 
 ## Build a project
 

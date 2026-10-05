@@ -34,6 +34,7 @@ export interface AgentMessage { role: 'system' | 'user' | 'assistant'; content: 
 export interface AgentProgress { text: string; model?: string; phase?: string; detail?: string }
 export type AgentSender = (request: {
   providerId: string;
+  runId?: string;
   prompt: string;
   messages: AgentMessage[];
   signal: AbortSignal;

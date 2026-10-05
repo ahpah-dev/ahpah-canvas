@@ -17,11 +17,14 @@ async function request(path: string, method = "GET", signal?: AbortSignal): Prom
 export const getCodexStatus = (signal?: AbortSignal) => request("status", "GET", signal);
 export const connectCodex = () => request("connect", "POST");
 export const cancelCodexLogin = () => request("cancel", "POST");
-export async function sendCodexPrompt(prompt: string, options: { signal?: AbortSignal; messages?: { role: string; content: string }[]; onProgress?: (progress: GatewayProgress) => void } = {}) {
+export async function closeCodexRun(runId: string) {
+  await fetch("/api/codex/close-run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId }), signal: AbortSignal.timeout(5000), redirect: "error" }).catch(() => {});
+}
+export async function sendCodexPrompt(prompt: string, options: { runId?: string; signal?: AbortSignal; messages?: { role: string; content: string }[]; onProgress?: (progress: GatewayProgress) => void } = {}) {
   const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(610_000)]);
   const model = codexModel();
   if (!model) throw new Error("Connect Codex with ChatGPT in Settings first.");
-  const response = await fetch("/api/codex/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, messages: options.messages?.length ? options.messages : [{ role: "user", content: prompt }] }), signal, redirect: "error" });
+  const response = await fetch("/api/codex/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, runId: options.runId, messages: options.messages?.length ? options.messages : [{ role: "user", content: prompt }] }), signal, redirect: "error" });
   if (!response.ok) { const value = await response.json(); throw new Error(value.error || "Codex request failed."); }
   if (!response.body) throw new Error("Codex returned no response stream.");
   const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";

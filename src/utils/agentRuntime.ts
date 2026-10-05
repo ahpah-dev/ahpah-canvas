@@ -2,6 +2,7 @@ import type { AgentActivity, AgentFileSyncResult, AgentMessage, AgentRunEvent, A
 import { createChangeSet, diffProjectFiles, normalizeProjectPath, validateProjectFiles } from './projectFiles.ts';
 import { completeHtml, htmlFilename, projectHtmlArtifact, requestsHtmlExport, requestsHtmlCreation, refusesHtmlSave } from './htmlExport.ts';
 import type { HtmlArtifact } from './htmlExport.ts';
+import { closeCodexRun } from './codexConnection.ts';
 
 export const AGENT_MAX_TURNS = 20;
 export const AGENT_MAX_ACTIONS = 8;
@@ -175,12 +176,13 @@ export async function runEngineeringAgent(options: {
     return outcome;
   };
   onEvent?.({ phase: 'planning', detail: 'Inspecting the project and planning your goal' });
+  const runId = crypto.randomUUID();
   try {
     for (let turn = 0; turn < maxTurns; turn++) {
       signal.throwIfAborted();
       while (messages.length > protectedMessages && prompt.length + messages.reduce((total, message) => total + message.content.length, 0) > AGENT_MAX_CONTEXT_CHARS) messages.splice(protectedMessages, Math.min(2, messages.length - protectedMessages));
       if (prompt.length + messages.reduce((total, message) => total + message.content.length, 0) > AGENT_MAX_CONTEXT_CHARS) throw new Error('The project context exceeds the coding request limit. Try a smaller goal or source folder.');
-      const result = await send({ providerId, prompt, messages: [...messages], signal, onProgress: progress => {
+      const result = await send({ providerId, runId, prompt, messages: [...messages], signal, onProgress: progress => {
         if (progress.model) model = progress.model;
         onEvent?.({ ...(progress.model ? { model } : {}), detail: progress.detail || (progress.text ? 'Receiving structured coding actions' : 'Waiting for the model') });
       } });
@@ -389,6 +391,8 @@ export async function runEngineeringAgent(options: {
     stopped = options.signal.aborted;
     error = stopped ? 'Stopped. Any staged changes are ready for review.' : signal.aborted ? 'Reached the 10-minute coding budget. Any staged changes have been kept for review.' : failure instanceof Error ? failure.message : 'The coding run failed.';
     emit(stopped ? 'notice' : 'error', stopped ? 'Run stopped' : 'Run interrupted', error);
+  } finally {
+    if (providerId === 'codex') await closeCodexRun(runId);
   }
   const changeSet = { ...createChangeSet(project, working, goal), plan, summary: summary || (stopped ? 'Partial changes from the stopped run' : 'Partial changes — review before applying'), review: review || 'The agent did not complete its review. Inspect these files before accepting.', commands, model, tokens };
   onEvent?.({ phase: stopped ? 'stopped' : error ? 'error' : 'ready', changes: changeSet.changes, model, tokens });

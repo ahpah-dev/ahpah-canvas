@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { CodexNativeSession } from "./codexNativeTools.ts";
 
 type Launcher = { file: string; args: string[] };
 type Message = { id?: number; method?: string; result?: any; error?: { message: string }; params?: any };
@@ -32,14 +33,17 @@ class Rpc {
   ready: Promise<void>;
   loginId?: string;
   loginError?: string;
-  constructor(launcher: Launcher, cwd: string) {
-    this.child = spawn(launcher.file, [...launcher.args, "app-server", "--listen", "stdio://"], { cwd, windowsHide: true, stdio: "pipe" });
+  handleServerRequest?: (message: Message) => void;
+  onNotification?: (message: Message) => void;
+  constructor(launcher: Launcher, cwd: string, native = false) {
+    this.child = spawn(launcher.file, [...launcher.args, "app-server", "--listen", "stdio://", ...(native ? ["-c", "mcp_servers={}", "-c", "plugins={}", "--disable", "shell_tool", "--disable", "apps", "--disable", "multi_agent"] : [])], { cwd, windowsHide: true, stdio: "pipe" });
     // Never relay stderr: authentication and configuration diagnostics can contain secrets.
     this.child.stderr.resume();
     createInterface({ input: this.child.stdout }).on("line", line => {
       try {
         const message: Message = JSON.parse(line);
         if (message.id !== undefined && message.method) {
+          if (this.handleServerRequest) { this.handleServerRequest(message); return; }
           this.child.stdin.write(JSON.stringify({ id: message.id, error: { code: -32601, message: "This client does not execute Codex tools." } }) + "\n");
         } else if (message.id !== undefined) {
           const pending = this.pending.get(message.id);
@@ -51,16 +55,18 @@ class Rpc {
           this.loginId = undefined;
           this.loginError = message.params?.success ? undefined : "Sign-in was cancelled or failed. Connect again.";
         }
+        if (message.id === undefined) this.onNotification?.(message);
       } catch { /* Ignore non-protocol output. */ }
     });
     const fail = () => {
       for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error("Codex stopped. Update or reinstall Codex and connect again.")); }
       this.pending.clear();
+      this.onNotification?.({ method: "error", params: { willRetry: false } });
     };
     this.child.on("error", fail); this.child.on("exit", fail);
     this.child.stdin.on("error", fail);
     this.child.on("close", () => { void removeTemporaryDirectory(cwd); });
-    this.ready = this.call("initialize", { clientInfo: { name: "ahpah_canvas", title: "AhPah Canvas", version: "0.1.0" } }).then(() => {
+    this.ready = this.call("initialize", { clientInfo: { name: "ahpah_canvas", title: "AhPah Canvas", version: "0.1.0" }, ...(native ? { capabilities: { experimentalApi: true } } : {}) }).then(() => {
       this.child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
     });
   }
@@ -73,12 +79,14 @@ class Rpc {
     });
   }
   close() { this.child.kill(); }
+  reply(id: number, result: unknown) { this.child.stdin.write(JSON.stringify({ id, result }) + "\n"); }
 }
 
 export function createCodexService(workspace: string) {
   let rpc: Rpc | undefined;
   let starting: Promise<Rpc> | undefined;
   let installing: Promise<void> | undefined;
+  const sessions = new Map<string, { session: CodexNativeSession; cwd: string; created: number }>();
   const toolsRoot = resolve(workspace, ".ahpah-tools");
   const packageEntry = join(toolsRoot, "node_modules/@openai/codex/bin/codex.js");
   async function launcher(): Promise<Launcher | undefined> {
@@ -156,14 +164,31 @@ export function createCodexService(workspace: string) {
       if (rpc?.loginId) await rpc.call("account/login/cancel", { loginId: rpc.loginId });
       return { cancelled: true };
     },
-    async complete(body: { model?: unknown; messages?: unknown }, signal: AbortSignal, emit: (value: unknown) => void) {
+    async complete(body: { model?: unknown; messages?: unknown; prompt?: unknown; runId?: unknown }, signal: AbortSignal, emit: (value: unknown) => void) {
       const current = await status();
       if (!current.connected) throw new Error("Connect Codex with ChatGPT in Settings first.");
       if (typeof body.model !== "string" || !current.models.some(model => model.id === body.model)) throw new Error("Select a current Codex model in Settings.");
       if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100 || body.messages.some(message => !message || !["user", "assistant", "system"].includes(message.role) || typeof message.content !== "string")) throw new Error("Invalid Codex conversation.");
       const executable = (await launcher())!;
+      if (body.runId !== undefined) {
+        if (typeof body.runId !== "string" || !/^[a-f0-9-]{36}$/.test(body.runId) || typeof body.prompt !== "string" || body.prompt.length > 100_000) throw new Error("Invalid Codex run request.");
+        for (const [id, entry] of sessions) if (entry.session.closed || Date.now() - entry.created > 600_000) { entry.session.close(); sessions.delete(id); }
+        let entry = sessions.get(body.runId);
+        if (!entry) {
+          if (sessions.size >= 2) throw new Error("Two Codex runs are already active. Stop one first.");
+          const cwd = await mkdtemp(join(tmpdir(), "ahpah-codex-native-"));
+          const client = new Rpc(executable, cwd, true);
+          const session = new CodexNativeSession(client, body.model);
+          entry = { session, cwd, created: Date.now() }; sessions.set(body.runId, entry);
+          try { await client.ready; } catch (error) { session.close(); sessions.delete(body.runId); throw error; }
+        }
+        if (entry.session.model !== body.model) throw new Error("The model changed during this run. Stop and start a new task.");
+        try { emit({ result: await entry.session.step(body.prompt, body.messages, entry.cwd, signal) }); }
+        catch (error) { entry.session.close(); sessions.delete(body.runId); throw error; }
+        return;
+      }
       const cwd = await mkdtemp(join(tmpdir(), "ahpah-codex-run-"));
-      const input = "You are the model for AhPah Canvas. Return the requested response or JSON action envelope. All project tools are executed by the host from your JSON; do not use native tools or inspect this computer.\n" + body.messages.map(message => `[${message.role}]\n${message.content}`).join("\n\n");
+      const input = "You are the model for AhPah Canvas. Answer the user's current task; do not inspect this computer.\n" + body.messages.map(message => `[${message.role}]\n${message.content}`).join("\n\n") + (typeof body.prompt === "string" ? `\n\n[user]\n${body.prompt}` : "");
       await new Promise<void>((finish, reject) => {
         signal.throwIfAborted();
         const child = spawn(executable.file, [...executable.args, "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--disable", "shell_tool", "--disable", "apps", "--disable", "multi_agent", "-c", 'approval_policy="never"', "--model", body.model as string, "--json", "-"], { cwd, windowsHide: true, stdio: "pipe" });
@@ -197,7 +222,8 @@ export function createCodexService(workspace: string) {
         child.stdin.end(input);
       });
     },
-    close() { rpc?.close(); },
+    async closeRun(runId: unknown) { if (typeof runId === "string") { sessions.get(runId)?.session.close(); sessions.delete(runId); } return { closed: true }; },
+    close() { rpc?.close(); for (const entry of sessions.values()) entry.session.close(); sessions.clear(); },
   };
 }
 
@@ -208,7 +234,7 @@ export function createCodexMiddleware(service: ReturnType<typeof createCodexServ
     if (!path.startsWith("/api/codex/")) { next(); return; }
     const json = (status: number, value: unknown) => { if (!response.destroyed) { response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" }); response.end(JSON.stringify(value)); } };
     if (!binding() || !codexRequestAllowed(request, request.method !== "GET")) { json(403, { error: "Codex requires the local app and a same-origin request." }); return; }
-    const routes: Record<string, string> = { "/api/codex/status": "GET", "/api/codex/connect": "POST", "/api/codex/cancel": "POST", "/api/codex/complete": "POST" };
+    const routes: Record<string, string> = { "/api/codex/status": "GET", "/api/codex/connect": "POST", "/api/codex/cancel": "POST", "/api/codex/complete": "POST", "/api/codex/close-run": "POST" };
     if (!routes[path]) { json(404, { error: "Unknown Codex route." }); return; }
     if (request.method !== routes[path]) { json(405, { error: "Unsupported method." }); return; }
     const controller = new AbortController();
@@ -219,13 +245,14 @@ export function createCodexMiddleware(service: ReturnType<typeof createCodexServ
       else if (path.endsWith("/connect")) json(200, await service.connect());
       else if (path.endsWith("/cancel")) json(200, await service.cancelLogin());
       else {
-        if (active >= 2) { json(429, { error: "Two Codex turns are already running. Stop or finish one before starting another." }); return; }
+        if (path.endsWith("/complete") && active >= 2) { json(429, { error: "Two Codex turns are already running. Stop or finish one before starting another." }); return; }
         const chunks: Buffer[] = []; let size = 0;
         for await (const chunk of request) { size += chunk.length; if (size > 700_000) { json(413, { error: "Codex context is too large." }); return; } chunks.push(Buffer.from(chunk)); }
         let body: unknown;
         try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
         catch { json(400, { error: "Invalid Codex request JSON." }); return; }
         if (!body || typeof body !== "object") { json(400, { error: "Invalid Codex request." }); return; }
+        if (path.endsWith("/close-run")) { json(200, await service.closeRun((body as { runId?: unknown }).runId)); return; }
         if (active >= 2) { json(429, { error: "Two Codex turns are already running. Stop or finish one before starting another." }); return; }
         response.writeHead(200, { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" }); response.flushHeaders();
         const emit = (value: unknown) => { if (!response.destroyed) response.write(JSON.stringify(value) + "\n"); };

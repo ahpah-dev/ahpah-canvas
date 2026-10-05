@@ -11,6 +11,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }, binding 
     async status() { return { installed: true, connected: true, models: [{ id: "catalog-model", name: "Catalog model", isDefault: true }] }; },
     async connect() { connections++; return this.status(); },
     async cancelLogin() { return { cancelled: true }; },
+    async closeRun() { return { closed: true }; },
     async complete(_body: unknown, _signal: AbortSignal, emit: (value: unknown) => void) { emit({ result: { text: "Working", model: "catalog-model", tokens: 12 } }); },
     close() {},
   } as ReturnType<typeof createCodexService>;
@@ -57,10 +58,13 @@ test("Codex client reads split events, final results and provider failures", asy
   t.after(() => { globalThis.fetch = oldFetch; if (oldStorage) Object.defineProperty(globalThis, "localStorage", oldStorage); else Reflect.deleteProperty(globalThis, "localStorage"); });
   const stream = (chunks: string[]) => new Response(new ReadableStream({ start(controller) { for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk)); controller.close(); } }));
   globalThis.fetch = async (_url, init) => {
-    assert.equal(JSON.parse(init?.body as string).model, "catalog-model");
+    const body = JSON.parse(init?.body as string);
+    assert.equal(body.model, "catalog-model");
+    assert.equal(body.prompt, "hello");
+    assert.equal(body.messages[0].content, "older context");
     return stream(['{"phase":"wait', 'ing","text":""}\n{"result":{"text":"OK","model":"catalog-model","tokens":5}}']);
   };
-  assert.deepEqual(await sendCodexPrompt("hello"), { text: "OK", model: "catalog-model", tokens: 5 });
+  assert.deepEqual(await sendCodexPrompt("hello", { messages: [{role:"system",content:"older context"}] }), { text: "OK", model: "catalog-model", tokens: 5 });
   globalThis.fetch = async () => stream(['{"error":"Plan limit reached"}\n']);
   await assert.rejects(sendCodexPrompt("hello"), /Plan limit reached/);
   globalThis.fetch = async () => stream(['{"phase":"waiting"}\n']);
