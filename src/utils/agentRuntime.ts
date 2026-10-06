@@ -4,10 +4,11 @@ import { completeHtml, htmlFilename, projectHtmlArtifact, requestsHtmlExport, re
 import type { HtmlArtifact } from './htmlExport.ts';
 import { closeCodexRun } from './codexConnection.ts';
 import { markKiloRouteUnhealthy } from './kiloRecovery.ts';
+import { HOSTED_CODING_MAX_REQUESTS } from './gatewayPolicy.ts';
 import { LOCAL_CODING_CONTEXT_BYTES, LOCAL_CODING_INSTRUCTIONS, LOCAL_CODING_CHUNK_CHARS, LOCAL_CODING_MAX_REQUESTS, LOCAL_CODING_TIMEOUT_MS, boundedUtf8, boundedJsonSource, utf8Length } from './localCoding.ts';
 
 export const AGENT_MAX_TURNS = 12;
-export const AGENT_MAX_REQUESTS = 12;
+export const AGENT_MAX_REQUESTS = HOSTED_CODING_MAX_REQUESTS;
 export const AGENT_MAX_ACTIONS = 8;
 export const AGENT_MAX_CONTEXT_CHARS = 48_000;
 export const AGENT_MAX_RESPONSE_CHARS = 280_000;
@@ -244,8 +245,8 @@ export async function runEngineeringAgent(options: {
       onEvent?.({ model, tokens });
       if (result.outputTruncated) {
         emit('notice', 'Continuing in smaller source sections', 'The local model reached its output or context limit. Only complete validated actions are kept; unfinished arguments are discarded.');
-        if (++cutoffRecoveries > 2) throw new Error('The local model hit its output or context limit repeatedly without completing a source section. Staged files are kept. Continue with a smaller implementation goal.');
         if (!result.text.trim()) {
+          if (++cutoffRecoveries > 2) throw new Error('The local model hit its output or context limit repeatedly without completing a source section. Staged files are kept. Continue with a smaller implementation goal.');
           // Retry from authoritative state, never feed back an incomplete source string.
           const state = { plan, files: working.map(file => ({ path: file.path, characters: file.content.length })), changedFiles: diffProjectFiles(original, working).map(change => ({ path: change.path, reviewed: reviewed.has(change.path) })), unresolvedTools: [...unresolvedTools] };
           prompt = `Your last response was cut off and no actions from it executed. Return one small action: write a complete file below 4,000 characters, append one complete JS/CSS section using its actual character count, or make an exact patch. Keep HTML, CSS and JS separate; export_html can bundle them. Do not repeat completed work. Original goal: ${goal}\nActual current state: ${JSON.stringify(state)}`;
@@ -495,7 +496,10 @@ export async function runEngineeringAgent(options: {
         if (seenSourceSnapshots.has(snapshot)) madeProgress = false;
         else seenSourceSnapshots.add(snapshot);
       }
-      if (result.outputTruncated && madeProgress) cutoffRecoveries = 0;
+      if (result.outputTruncated) {
+        if (madeProgress) cutoffRecoveries = 0;
+        else if (++cutoffRecoveries > 2) throw new Error('The local model hit its output or context limit repeatedly without making progress. Staged files are kept. Continue with a smaller implementation goal.');
+      }
       idleTurns = madeProgress ? 0 : idleTurns + 1;
       let recoveryInstruction = '';
       if (idleTurns >= 2) {

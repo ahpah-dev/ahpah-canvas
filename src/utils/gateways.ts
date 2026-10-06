@@ -1,5 +1,5 @@
 import { isAutomaticModel, isFreeModel, sortModelCatalog } from "./modelCatalog.ts";
-import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS, LOCAL_COMPLETION_TIMEOUT_MS, LOCAL_COMPLETION_TIMEOUT_MESSAGE, isLocalOllamaUrl } from "./gatewayPolicy.ts";
+import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS, HOSTED_CODING_MAX_REQUESTS, LOCAL_COMPLETION_TIMEOUT_MS, LOCAL_COMPLETION_TIMEOUT_MESSAGE, isLocalOllamaUrl } from "./gatewayPolicy.ts";
 import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
 import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
@@ -374,7 +374,10 @@ export async function sendGatewayPrompt(
   for (let attempt = 0; attempt < attempts; attempt++) {
     signal.throwIfAborted();
     const used = options.routing?.requestsUsed ?? 0;
-    const limit = options.routing?.requestLimit;
+    const configuredLimit = options.routing?.requestLimit;
+    // A profile edited during a local run must not inherit its larger compute
+    // budget after switching to a hosted endpoint.
+    const limit = configuredLimit === undefined ? undefined : localOllama ? configuredLimit : Math.min(configuredLimit, HOSTED_CODING_MAX_REQUESTS);
     if (limit !== undefined && used >= limit)
       throw new Error(`This run reached its ${limit}-request limit. Staged files are kept; start a new task to continue.`);
     if (limit !== undefined) {
