@@ -1,5 +1,6 @@
-import React, { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search } from 'lucide-react';
+import React, { useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ChevronDown, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search, Radio } from 'lucide-react';
 import type { AgentActivity, AgentPhase, AgentSender, EngineeringChangeSet, EngineeringProject, EngineeringProvider, ProjectChange } from '../../types/engineering';
 import { applyProjectChanges, buildProjectPreview, createChangeSet, createProjectZip, createStarterProject, importSourceFiles, inverseProjectChanges, normalizeProjectPath, PROJECT_STORAGE_KEY, projectByteSize, validateChangeSet, validateEngineeringProject } from '../../utils/projectFiles';
 import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRuntime';
@@ -7,7 +8,10 @@ import { discoverProjectExecution, runProjectCommand } from '../../utils/project
 import { useDialogFocus } from '../../utils/useDialogFocus';
 import { htmlExportRequest, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
 import { autoSaveFilesToFolder, saveHtmlToFolder } from '../../utils/connectedFolder';
+import { SourceEditor } from './SourceEditor';
+import { sourceLanguage } from '../../utils/sourceHighlight';
 import './engineering.css';
+import './codeInterface.css';
 
 export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean; canvasProject?: EngineeringProject; canvasCommands?: string[]; onCanvasProjectChange?: (project: EngineeringProject, signal: AbortSignal) => Promise<string> }
 
@@ -59,6 +63,169 @@ function DiffPanel({ change }: { change: ProjectChange }) {
       {after.slice(start, addedEnd).slice(0, 700).map((line, index) => <div key={index} className={index + start >= prefix && index + start < after.length - suffix ? 'eng-diff-added' : ''}><span className="eng-line-number">{index + start + 1}</span><code>{line || ' '}</code></div>)}
       {addedEnd - start > 700 && <div className="eng-diff-truncated">Diff preview limited to 700 lines. Use download to inspect the complete proposed file.</div>}
     </pre></section>
+  </div>;
+}
+
+function EngineeringProviderPicker({ providers, value, disabled, onChange, onOpenSettings }: {
+  providers: EngineeringProvider[];
+  value: string;
+  disabled: boolean;
+  onChange: (providerId: string) => void;
+  onOpenSettings: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+  const selectedIndex = providers.findIndex(provider => provider.id === value);
+  const activeProvider = providers[activeIndex];
+  const selectedProvider = providers[selectedIndex];
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    let frame = 0;
+    let settledFrame = 0;
+    let settleFrames = 0;
+    let active = true;
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+      const anchor = trigger.getBoundingClientRect();
+      const width = Math.min(320, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12));
+      const roomAbove = Math.max(0, anchor.top - 20);
+      const roomBelow = Math.max(0, window.innerHeight - anchor.bottom - 20);
+      const opensUp = roomBelow < 244 && roomAbove > roomBelow;
+      const maxHeight = Math.max(160, Math.min(252, opensUp ? roomAbove : roomBelow));
+      popover.style.position = 'fixed';
+      popover.style.left = `${left}px`;
+      popover.style.width = `${width}px`;
+      popover.style.maxHeight = `${maxHeight}px`;
+      const renderedHeight = Math.min(popover.scrollHeight, maxHeight);
+      const top = opensUp
+        ? Math.max(12, anchor.top - renderedHeight - 7)
+        : Math.min(window.innerHeight - renderedHeight - 12, anchor.bottom + 7);
+      popover.style.top = `${top}px`;
+    };
+    const scheduleUpdate = () => {
+      if (!active) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updatePosition);
+    };
+    const settlePosition = () => {
+      if (!active) return;
+      updatePosition();
+      if (++settleFrames < 6) settledFrame = requestAnimationFrame(settlePosition);
+    };
+    updatePosition();
+    settledFrame = requestAnimationFrame(settlePosition);
+    window.addEventListener('resize', scheduleUpdate);
+    document.addEventListener('scroll', scheduleUpdate, true);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleUpdate);
+    if (triggerRef.current) {
+      let ancestor: HTMLElement | null = triggerRef.current;
+      while (ancestor) {
+        observer?.observe(ancestor);
+        ancestor = ancestor.parentElement;
+      }
+    }
+    if (popoverRef.current) observer?.observe(popoverRef.current);
+    document.fonts?.ready.then(scheduleUpdate);
+    window.visualViewport?.addEventListener('resize', scheduleUpdate);
+    window.visualViewport?.addEventListener('scroll', scheduleUpdate);
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(settledFrame);
+      window.removeEventListener('resize', scheduleUpdate);
+      document.removeEventListener('scroll', scheduleUpdate, true);
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
+      window.visualViewport?.removeEventListener('scroll', scheduleUpdate);
+      observer?.disconnect();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || activeIndex < 0) return;
+    document.getElementById(`${listboxId}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, listboxId, open]);
+
+  const openPicker = () => {
+    if (disabled) return;
+    setPortalTarget(document.body);
+    setActiveIndex(selectedIndex >= 0 ? selectedIndex : providers.length ? 0 : -1);
+    setOpen(true);
+    requestAnimationFrame(() => (listboxRef.current ?? popoverRef.current)?.focus());
+  };
+
+  const closePicker = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const chooseProvider = (provider: EngineeringProvider) => {
+    onChange(provider.id);
+    closePicker(true);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!open) {
+      if (event.target === triggerRef.current && ['ArrowDown', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        openPicker();
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePicker(true);
+    } else if (event.key === 'ArrowDown' && providers.length) {
+      event.preventDefault();
+      setActiveIndex(index => Math.min(index < 0 ? 0 : index + 1, providers.length - 1));
+    } else if (event.key === 'ArrowUp' && providers.length) {
+      event.preventDefault();
+      setActiveIndex(index => Math.max(index < 0 ? providers.length - 1 : index - 1, 0));
+    } else if (event.key === 'Enter' && activeProvider) {
+      event.preventDefault();
+      chooseProvider(activeProvider);
+    } else if (event.key === 'Tab') {
+      closePicker();
+    }
+  };
+
+  return <div className="eng-provider-select" ref={rootRef} onKeyDown={handleKeyDown}>
+    <span className="eng-provider-field-label">MODEL FOR THIS RUN</span>
+    <button ref={triggerRef} type="button" className="eng-provider-trigger" aria-label={selectedProvider ? `Choose provider and model. Selected ${selectedProvider.label}, ${selectedProvider.model}` : 'Choose a provider and model'} title={selectedProvider ? `${selectedProvider.label} · ${selectedProvider.model}` : undefined} aria-haspopup={providers.length ? 'listbox' : 'dialog'} aria-expanded={open} aria-controls={open && providers.length ? listboxId : undefined} disabled={disabled} onClick={() => open ? closePicker() : openPicker()}>
+      <span className="eng-provider-select-icon" aria-hidden="true"><Radio size={14} /></span>
+      <span className="eng-provider-trigger-copy"><strong>{selectedProvider?.label ?? 'Configure a provider'}</strong><small>{selectedProvider?.model || (providers.length ? 'Choose a model in Settings' : 'No coding provider connected')}</small></span>
+      <ChevronDown size={13} className="eng-provider-select-chevron" aria-hidden="true" />
+    </button>
+    {open && portalTarget && createPortal(<div className="eng-provider-popover" ref={popoverRef} role={!providers.length ? 'dialog' : undefined} aria-label={!providers.length ? 'Provider setup' : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
+      <header className="eng-provider-popover-header"><div><span>MODEL ROUTING</span><strong>Choose provider &amp; model</strong></div><span className="eng-provider-count">{providers.length} {providers.length === 1 ? 'route' : 'routes'}</span></header>
+      {providers.length ? <div className="eng-provider-options" id={listboxId} role="listbox" aria-label="Coding providers" aria-activedescendant={activeProvider ? `${listboxId}-${activeIndex}` : undefined} tabIndex={-1} ref={listboxRef}>
+        {providers.map((provider, index) => <div id={`${listboxId}-${index}`} key={provider.id} role="option" aria-selected={provider.id === value} className={`eng-provider-option${provider.id === value ? ' is-selected' : ''}${index === activeIndex ? ' is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onMouseDown={event => event.preventDefault()} onClick={() => chooseProvider(provider)}>
+          <span className="eng-provider-option-mark"><Radio size={14} /></span>
+          <span className="eng-provider-option-copy"><strong>{provider.label}</strong><small>{provider.model || 'Choose a model in Settings'}</small></span>
+          {provider.id === value && <Check size={14} className="eng-provider-option-check" />}
+        </div>)}
+      </div> : <div className="eng-provider-empty"><span className="eng-provider-empty-mark"><Radio size={16} /></span><strong>No coding model connected</strong><p>Add a provider in Settings to choose a model for this project.</p><button type="button" className="eng-provider-settings" onClick={() => { closePicker(); onOpenSettings(); }}><Settings2 size={12} />Open provider settings<ExternalLink size={11} /></button></div>}
+      {providers.length > 0 && <footer className="eng-provider-popover-footer">Used for your next Build or Explain run.</footer>}
+    </div>, portalTarget)}
   </div>;
 }
 
@@ -133,7 +300,6 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const previewErrors = previewErrorState.key === previewMessageKey ? previewErrorState.items : [];
   const htmlEntries = projectFiles.filter(file => /\.html?$/i.test(file.path));
   const lineCount = activeFile ? activeFile.content.split('\n').length : 1;
-  const gutterText = useMemo(() => Array.from({ length: Math.min(lineCount, 10000) }, (_, index) => String(index + 1)).join('\n'), [lineCount]);
   const pendingCount = pending?.changes.length ?? 0;
   const exportRequest = htmlExportRequest(goal);
   const goalReady = goal.trim().length > 0 && (Boolean(activeProvider?.model) || Boolean(exportRequest)) && !busy;
@@ -477,11 +643,8 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         </nav>
 
         {tab === 'code' && <section id="eng-panel-code" role="tabpanel" aria-labelledby="eng-tab-code" className="eng-code-panel">
-          <div className="eng-editor-bar"><span><FileCode2 size={13} />{activeFile?.path ?? 'No file selected'}</span><div>{activeFile && <><span>{lineCount} lines</span><button aria-label={`Delete ${activeFile.path}`} title="Delete selected file" onClick={() => setFileDialog('delete')}><Trash2 size={13} /></button></>}</div></div>
-          {activeFile ? <div className="eng-editor"><div className="eng-editor-gutter" aria-hidden="true">{gutterText}</div><textarea key={activeFile.path} aria-label={`Edit ${activeFile.path}`} spellCheck={false} wrap="off" value={activeFile.content} disabled={folderSaving} onChange={event => updateFile(event.target.value)} onScroll={event => { const gutter = event.currentTarget.previousElementSibling; if (gutter) gutter.scrollTop = event.currentTarget.scrollTop; }} onKeyDown={event => {
-            if (event.key === 'Tab') { event.preventDefault(); const input = event.currentTarget; const start = input.selectionStart; const end = input.selectionEnd; updateFile(input.value.slice(0, start) + '  ' + input.value.slice(end)); requestAnimationFrame(() => { input.selectionStart = input.selectionEnd = start + 2; }); }
-          }} /></div> : <div className="eng-panel-empty"><Code2 size={32} /><h2>Your project starts with a file.</h2><p>Create a source file, import a folder, or describe what you want the agent to build.</p><button className="eng-button eng-primary" onClick={() => setFileDialog('add')}><Plus size={14} />Create file</button></div>}
-          <footer className="eng-editor-footer"><span>{activeFile?.path.split('.').pop()?.toUpperCase() ?? 'SOURCE'} <span>UTF-8</span></span><span>{canvasProject?.id === project.id ? 'Canvas edits sync to your folder · agent changes require review' : 'Direct edits save automatically · agent changes require review'}</span></footer>
+          <div className="eng-editor-bar"><span className="eng-editor-path" title={activeFile?.path}><FolderOpen size={13} /><span className="eng-editor-directory">{activeFile?.path.includes('/') ? activeFile.path.slice(0, activeFile.path.lastIndexOf('/')) : project.name}</span><ChevronRight size={11} /><strong><FileCode2 size={13} />{activeFile?.path.split('/').pop() ?? 'No file selected'}</strong></span><div>{activeFile && <><span className="eng-editor-language">{sourceLanguage(activeFile.path)}</span><span>{lineCount} lines</span><button aria-label={`Delete ${activeFile.path}`} title="Delete selected file" onClick={() => setFileDialog('delete')}><Trash2 size={13} /></button></>}</div></div>
+          {activeFile ? <SourceEditor key={activeFile.path} path={activeFile.path} value={activeFile.content} disabled={folderSaving} onChange={updateFile} saveNote={canvasProject?.id === project.id ? 'Synced to your folder · review agent changes' : 'Edits autosave · review agent changes'} /> : <><div className="eng-panel-empty"><Code2 size={32} /><h2>Your project starts with a file.</h2><p>Create a source file, import a folder, or describe what you want the agent to build.</p><button className="eng-button eng-primary" onClick={() => setFileDialog('add')}><Plus size={14} />Create file</button></div><footer className="eng-editor-footer">Create or open a file to start editing.</footer></>}
         </section>}
 
         {tab === 'changes' && <section id="eng-panel-changes" role="tabpanel" aria-labelledby="eng-tab-changes" className="eng-changes-panel">
@@ -532,8 +695,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
           <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" aria-pressed={goalMode === 'build'} className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" aria-pressed={goalMode === 'explain'} className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? '12 requests max · 10 min budget' : 'Read only'}</span></div>
           <textarea aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy || folderSaving} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
           <div className="eng-composer-hint"><span>Ctrl / ⌘ + Enter to submit</span><span aria-label={`${goal.length} of ${AGENT_MAX_GOAL_CHARS} characters`}>{goal.length.toLocaleString()} / {AGENT_MAX_GOAL_CHARS.toLocaleString()}</span></div>
-          <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy || folderSaving}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy || folderSaving}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
-          <div className="eng-provider-model">{activeProvider?.model ? <><span className="eng-connection-dot" />{activeProvider.model}</> : <button type="button" onClick={onOpenSettings}>Choose a model in Settings <ExternalLink size={10} /></button>}</div>
+          <div className="eng-composer-actions"><EngineeringProviderPicker providers={providers} value={chosenProviderId} disabled={busy || folderSaving} onChange={setProviderId} onOpenSettings={onOpenSettings} />{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy || folderSaving}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
         </form>
       </aside>
     </div>
