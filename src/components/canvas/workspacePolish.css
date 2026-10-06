@@ -118,3 +118,36 @@
 @media (prefers-reduced-motion:reduce) { .cw-empty-options button,.cw-selection-context { animation:none; transition:none; } .cw-empty-options button:hover { transform:none; } }
 
 @media (max-height:740px) { .cw-app .cw-sidebar-footer button small { display:none; } .cw-app .cw-sidebar-footer button { min-height:37px; padding-block:8px; } .cw-app .cw-sidebar-footer { padding:8px 14px; } .cw-app .cw-sidebar-footer p { margin-top:9px; } }
+
+/* Matte Canvas materials match the engineering workspace. */
+.cw-app .cw-stage-glow { display:none; }
+.cw-app .cw-sidebar { background:var(--cw-panel); }
+.cw-app .cw-nav { background:var(--cw-panel); box-shadow:none; }
+.cw-app .cw-card { background:var(--cw-panel); border-color:color-mix(in srgb,var(--cw-text) 16%,transparent); border-radius:12px; box-shadow:0 5px 20px #00000012; }
+.cw-app .cw-card.selected,.cw-app .cw-card:focus-within,.cw-app .cw-card.cw-kilo.selected,.cw-app .cw-card.cw-browser.selected { box-shadow:0 0 0 1px color-mix(in srgb,var(--cw-accent) 40%,transparent); }
+.cw-app .cw-card-header,.cw-app .cw-card-composer,.cw-app .cw-card-footer,.cw-app .cw-conversation { background-image:none; }
+.cw-app .cw-card-header { background:var(--cw-panel-raised); border-color:var(--cw-border); padding-block:15px; }
+.cw-app .cw-card-header h2 { font-size:15px; font-weight:600; letter-spacing:-.02em; }
+.cw-app .cw-card-header small { font-size:11px; color:var(--cw-body); }
+.cw-app .cw-card-composer { box-shadow:none; border-color:var(--cw-border); }
+.cw-app .cw-card-composer:focus-within { box-shadow:none; border-color:var(--cw-accent); }
+.cw-app .cw-conversation { color:var(--cw-body); }
+.cw-app .cw-empty-icon { background:var(--cw-panel-raised); border-color:var(--cw-border); box-shadow:none; transform:none; border-radius:12px; }
+.cw-app .cw-agent-welcome,.cw-app .cw-agent-welcome-icon { background-image:none; box-shadow:none; }
+.cw-app .cw-primary-button,.cw-app .cw-primary-button:hover { box-shadow:none; }
+.cw-app .cw-icon-tile { background:var(--cw-panel-raised); border-color:var(--cw-border); box-shadow:none; }
+.cw-app .cw-toolbar { box-shadow:0 5px 20px #00000012; border-radius:9px; }
+.cw-app .cw-toolbar button[aria-pressed=true] { box-shadow:none; }
+.cw-app .cw-add-menu { box-shadow:0 12px 35px #00000026; border-radius:11px; }
+.cw-app .cw-selection-context { box-shadow:none; border-radius:8px; }
+.cw-app .cw-sidebar-search:focus-within { box-shadow:none; }
+.cw-app .cw-sidebar header p,.cw-app .cw-sidebar-footer button small,.cw-app .cw-sidebar-stats span,.cw-app .cw-sidebar-section-title { color:var(--cw-body); }
+.cw-app .cw-sidebar-filters { padding:4px; border-radius:7px; }
+.cw-app .cw-sidebar-filters button[aria-pressed=true] { box-shadow:none; }
+.cw-app .cw-session.selected { background:var(--cw-panel-raised); box-shadow:inset 2px 0 var(--cw-accent); }
+.cw-app .cw-session small { color:var(--cw-body); }
+.cw-app .cw-command-bar { background:var(--cw-panel); border-color:var(--cw-border); box-shadow:none; }
+.cw-app .cw-command-bar:focus-within { box-shadow:none; border-color:var(--cw-accent); }
+.cw-app .cw-empty-options button { background:var(--cw-panel); }
+.cw-app .cw-empty-options button:hover { transform:none; background:var(--cw-panel-raised); }
+.cw-app .cw-empty-options span,.cw-app .cw-empty-assurance { color:var(--cw-body); }

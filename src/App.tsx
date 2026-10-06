@@ -898,7 +898,7 @@ export function App() {
             onLaunchCanvas={() => setCurrentView("canvas")}
             onOpenMemory={() => setIsMemoryOpen(true)}
             onOpenWorkspaces={() => setIsWorkspacesOpen(true)}
-            onOpenOneClickSetup={() => { setCurrentView("code"); setIsSettingsOpen(true); }}
+            onOpenOneClickSetup={() => setIsOneClickSetupOpen(true)}
           />
         ) : currentView === "code" ? (
           <React.Suspense fallback={<div className="cw-tool-empty" role="status"><h2>Opening your coding workspace…</h2></div>}>
@@ -963,11 +963,8 @@ export function App() {
         isOpen={isOneClickSetupOpen}
         onClose={() => setIsOneClickSetupOpen(false)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onLaunchCode={() => { setCurrentView('code'); setIsOneClickSetupOpen(false); }}
         onApplyOneClickSetup={handleApplyOneClickSetup}
-        onOmniRouteConnected={() => {
-          const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === 'omniroute')?.id || handleAddCard('agent', 'omniroute');
-          setIsSimulated(false); setCurrentView('canvas'); setIsOneClickSetupOpen(false); focusCard(id);
-        }}
       />
 
       <MemoryHubModal
@@ -1001,6 +998,7 @@ export function App() {
       />
 
       <SettingsModal
+        onConnectLocal={() => { setCurrentView('code'); setIsSettingsOpen(false); }}
         onConnectOmniRoute={() => {
           const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === 'omniroute')?.id || handleAddCard('agent', 'omniroute');
           setIsSimulated(false); setCurrentView('canvas'); setIsSettingsOpen(false); focusCard(id);
@@ -1015,6 +1013,7 @@ export function App() {
         onAddCustomProvider={(providerId) => {
           const id = handleAddCard("agent", "custom", undefined, providerId);
           setIsSimulated(false);
+          setCurrentView("canvas");
           setIsSettingsOpen(false);
           focusCard(id);
         }}

@@ -5,6 +5,7 @@ import {
   Database,
   FolderKanban,
   Layers3,
+  CircleHelp,
   Settings,
 } from "lucide-react";
 import { supportsLocalBridge } from "../utils/gateways";
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenMemory,
   onOpenWorkspaces,
   onOpenSettings,
+  onOpenOneClickSetup,
   memoryCount,
 }) =>
   currentView === "site" ? (
@@ -119,6 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
       <nav aria-label="Workspace navigation">
         <FolderConnection />
+        <button onClick={onOpenOneClickSetup} aria-label="Getting started" title="Getting started"><CircleHelp size={15} /><span>Guide</span></button>
         {currentView === "canvas" && <>
         <button onClick={onOpenMemory} aria-label="Project memory">
           <Database size={14} />

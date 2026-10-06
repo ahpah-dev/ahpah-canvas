@@ -1,12 +1,15 @@
 # AhPah Canvas
 
-An open source agentic coding workspace with real project files, an editor, visible agent actions, reviewed changes, and previews. Connect **Codex with your ChatGPT subscription**, OmniRoute, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
+An open source agentic coding workspace with real project files, a syntax highlighted editor, visible agent actions, reviewed changes, and previews. Run **local Ollama models without hosted API quotas**, or connect **Codex with your ChatGPT subscription**, OmniRoute, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
 
 [Open the live site](https://ahpah-dev.github.io/ahpah-canvas/) · [Source on GitHub](https://github.com/ahpah-dev/ahpah-canvas) · [MIT license](LICENSE)
 
 ## Features
 
 - A persistent project explorer and editor. Start with HTML/CSS/JavaScript files, import your own text source files, and download the finished project as a ZIP.
+- A command palette for project files and workspace actions, file filtering, and editor Find/Replace with literal matching, case control, navigation, and undoable replacements.
+- First-class local AI setup: detect actual installed Ollama models, install/start the official runtime on Windows when requested, and download a chosen local model with progress and cancellation. No models download automatically.
+- An editorial landing page, cohesive matte Code/Canvas materials, accessible keyboard controls, and an in-workspace getting started guide.
 - A connected PC folder shared by Canvas and Code. Export requests write real HTML files there, including local project CSS and JavaScript, with actual save results and a previous-version backup.
 - A real coding agent loop that plans a goal, lists and reads files, searches source, and stages file edits or deletions. Tool activity shows what actually happened.
 - File changes remain pending until you review and apply them. Accept individual files or a complete set, detect conflicts with your own edits, and undo applied changes.
@@ -49,11 +52,25 @@ npm run build
 npm run preview
 ```
 
-Use **Settings → One-click OmniRoute setup** to install and start OmniRoute locally. Other local model servers can be started separately.
+Use **Guide** in the workspace top bar for the model → project → build walkthrough. **Settings → Local AI** detects Ollama first. **Settings → Hosted & custom providers → One-click OmniRoute setup** can install and start OmniRoute locally.
+
+### Free coding without hosted API quotas
+
+1. Run the local app with **Start AhPah.bat** or `npm run dev`.
+2. Open **Settings**. The **Local AI. No API quotas.** panel reads your PC's actual installed models without making a generation request.
+3. If needed, click **Set up Ollama**. On Windows this uses the official `Ollama.Ollama` package from the checksum-verifying WinGet source and starts the loopback runtime. If WinGet is unavailable, install the runtime from [Ollama's official download page](https://ollama.com/download), then retry. macOS/Linux users install Ollama from that page first.
+4. Choose an installed model, or expand **Download another local model** and explicitly download a model from [Ollama's library](https://ollama.com/library). Downloads show progress and can be stopped/resumed. The in-app downloader supports up to 32 GB; larger models can be installed separately with Ollama.
+5. Click **Use in Code** to select that exact local model, or **Add Canvas agent** to create a card using it. No API key is needed. Local model requests use the app's local bridge, so Ollama does not need public exposure or broad browser CORS settings.
+
+The app and Ollama runtime are free; model license terms still apply. Local inference has no hosted request/token quota or per-token bill. Available RAM/VRAM, electricity, model quality, and processing speed determine what your PC can run. Cloud/remote Ollama tags are excluded from this setup. The agent still uses bounded runs and file review to prevent loops; a stopped run retains staged work for review and continuation.
+
+[Qwen3.5 4B](https://ollama.com/library/qwen3.5:4b) is a compact download of about 3.4 GB; [Qwen3.6 27B](https://ollama.com/library/qwen3.6:27b) is an advanced coding option of about 19 GB. Model weights need additional memory during use. These are explicit download suggestions, not fabricated installed entries. The picker lists only models actually returned by your local runtime.
+
+The GitHub Pages site serves the browser app; it cannot install software or run local HTTP inference on your PC. Its settings link to the local setup instructions. Hosted APIs, Kilo routes, and Codex subscriptions keep their provider/account limits. Nothing in AhPah bypasses them. Hosted auto setup is opt-in on new installations, and opening settings does not spend hosted inference quota by default.
 
 ### Connect Codex with your ChatGPT plan
 
-Open **Settings → Connections & auto setup → Connect with ChatGPT** in the local app. It detects an installed Codex CLI (including the Windows Codex app), or installs the official `@openai/codex` package in the ignored `.ahpah-tools` folder. An existing ChatGPT sign-in is reused; otherwise complete OpenAI's sign-in in the tab it opens. The connection is detected automatically after sign-in. No API key or credential file is copied into the browser.
+Open **Settings → Connections & auto setup → Hosted & custom providers → Connect with ChatGPT** in the local app. It detects an installed Codex CLI (including the Windows Codex app), or installs the official `@openai/codex` package in the ignored `.ahpah-tools` folder. An existing ChatGPT sign-in is reused; otherwise complete OpenAI's sign-in in the tab it opens. The connection is detected automatically after sign-in. No API key or credential file is copied into the browser.
 
 The model picker loads Codex's current catalog and selects its reported default. Choose a model, then **Use Codex in Canvas** to add/focus a coding card and leave demo mode. You can also create a Codex card from **Canvas → Add card → Codex agent**. Codex is also available in the Code provider picker. Your ChatGPT plan's eligibility, model access, and shared usage limits apply. Catalog visibility is not proof of model entitlement.
 

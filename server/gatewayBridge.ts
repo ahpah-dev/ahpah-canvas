@@ -6,6 +6,9 @@ import {
   CATALOG_TIMEOUT_MS,
   COMPLETION_TIMEOUT_MS,
   COMPLETION_TIMEOUT_MESSAGE,
+  LOCAL_COMPLETION_TIMEOUT_MS,
+  LOCAL_COMPLETION_TIMEOUT_MESSAGE,
+  isLocalOllamaUrl,
 } from "../src/utils/gatewayPolicy.ts";
 
 export async function gatewayMiddleware(
@@ -52,10 +55,8 @@ export async function gatewayMiddleware(
     }
   }
   const controller = new AbortController();
-  const upstreamSignal = AbortSignal.any([
-    controller.signal,
-    AbortSignal.timeout(method === "POST" ? COMPLETION_TIMEOUT_MS : CATALOG_TIMEOUT_MS),
-  ]);
+  let upstreamSignal: AbortSignal | undefined;
+  let localOllama = false;
   const disconnect = () => {
     if (!response.writableEnded) controller.abort();
   };
@@ -73,6 +74,11 @@ export async function gatewayMiddleware(
       json(400, error instanceof Error ? error.message : "Invalid provider URL.");
       return;
     }
+    localOllama = match[1] === 'custom' && isLocalOllamaUrl(normalizedBase);
+    upstreamSignal = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(method === 'POST' ? localOllama ? LOCAL_COMPLETION_TIMEOUT_MS : COMPLETION_TIMEOUT_MS : CATALOG_TIMEOUT_MS),
+    ]);
     const parsed = new URL(normalizedBase);
     if (
       !["http:", "https:"].includes(parsed.protocol) ||
@@ -154,8 +160,8 @@ export async function gatewayMiddleware(
     }
   } catch (error) {
     if (controller.signal.aborted) return;
-    const message = (upstreamSignal.aborted && upstreamSignal.reason?.name === "TimeoutError") || (error instanceof Error && error.name === "TimeoutError")
-      ? method === "POST" ? COMPLETION_TIMEOUT_MESSAGE : "The model catalog did not respond within 15 seconds."
+    const message = (upstreamSignal?.aborted && upstreamSignal.reason?.name === "TimeoutError") || (error instanceof Error && error.name === "TimeoutError")
+      ? method === "POST" ? localOllama ? LOCAL_COMPLETION_TIMEOUT_MESSAGE : COMPLETION_TIMEOUT_MESSAGE : "The model catalog did not respond within 15 seconds."
       : `Could not reach ${match[1] === "kilo" ? "Kilo" : match[1] === "custom" ? "your API provider" : "OmniRoute"}. Check the gateway URL and your network connection.`;
     if (response.headersSent) {
       if (!response.destroyed)

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowDown, ArrowRight, ArrowUpRight, Check, ChevronDown, Code2,
   FileCode2, FileDiff, Folder, FolderKanban, Moon, Play,
-  Plug, Radio, RotateCcw, Search, ShieldCheck, Sparkles, Sun, Terminal,
+  Plug, Radio, RotateCcw, Search, ShieldCheck, Sparkles, Sun, Terminal, Laptop, Layers3,
 } from "lucide-react";
 import "./landing.css";
 
@@ -198,21 +198,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
   };
 
   return (
-    <div className="lp-page" ref={pageRef}>
+    <div className="lp-page lp-matte" ref={pageRef}>
       <div>
         <section className="lp-hero">
           <div className="lp-hero-grid" aria-hidden="true" /><div className="lp-hero-light" aria-hidden="true" /><div className="lp-hero-orbits" aria-hidden="true"><i /><i /><i /><span className="lp-orbit-point"><Code2 size={17} /></span><span className="lp-orbit-point cyan"><Sparkles size={15} /></span></div>
-          <div className="lp-hero-copy">
-            <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Sparkles size={12} /> YOUR MODELS. YOUR CODE. YOUR CALL.</span><ArrowRight size={12} /></button>
-            <h1 className="lp-enter lp-enter-1">From idea to<br /><span>working software.</span></h1>
-            <p className="lp-enter lp-enter-2">Give your agents a project to work on.<br /> Read the code, review the changes, and see what you’re building.</p>
-            <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Start coding <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>Explore the workspace <ArrowDown size={15} /></a></div>
-            <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> Real project files</span><span><Check size={12} /> Reviewable edits</span><span><Check size={12} /> Your own providers</span></div>
+          <div className="lp-hero-copy lp-container">
+            <div className="lp-hero-message">
+              <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Code2 size={12} /> OPEN SOURCE. BUILT FOR BUILDING.</span><ArrowRight size={12} /></button>
+              <h1 className="lp-enter lp-enter-1">Build software.<br /><span>Keep your flow.</span></h1>
+              <p className="lp-enter lp-enter-2">Your files, your agents, your next great idea.<br /> An engineering workspace that keeps the whole change in view.</p>
+              <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Open workspace <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>See how it works <ArrowDown size={15} /></a></div>
+              <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> MIT licensed</span><span><Check size={12} /> Real project files</span><span><Check size={12} /> You review the changes</span></div>
+            </div>
+            <aside className="lp-start-panel lp-enter lp-enter-2" aria-label="Choose your starting point">
+              <span className="lp-start-label">A CLEAR NEXT STEP</span><h2>Make room for<br /> your best work.</h2>
+              <button onClick={onLaunchCode}><Code2 size={19} /><span><strong>Build in Code</strong><small>Files, agent tasks, diffs, and previews</small></span><ArrowUpRight size={16} /></button>
+              <button onClick={onLaunchCanvas}><Layers3 size={19} /><span><strong>Think in Canvas</strong><small>Named agents and connected project context</small></span><ArrowUpRight size={16} /></button>
+              <button onClick={onOpenOneClickSetup}><Laptop size={19} /><span><strong>Choose your models</strong><small>Run locally or connect a hosted provider</small></span><ArrowUpRight size={16} /></button>
+              <p><ShieldCheck size={13} /> A free workspace. Your choice of intelligence.</p>
+            </aside>
           </div>
           <div className="lp-container lp-enter lp-enter-4"><EngineeringShowcase onLaunch={onLaunchCode} workspaceDrop={workspaceDrop} onWorkspaceDropEnd={() => setWorkspaceDrop(false)} /></div>
         </section>
 
-        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>BUILT AROUND<br /><strong>YOUR MODELS.</strong></span><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo Auto Free</div><div><Plug size={20} /> Custom APIs</div></section>
+        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>BUILT AROUND<br /><strong>YOUR MODELS.</strong></span><div><Laptop size={20} /> Local Ollama</div><div><Code2 size={20} /> Codex</div><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo</div><div><Plug size={20} /> Custom APIs</div></section>
+
+        <section className="lp-model-paths lp-container" aria-labelledby="lp-model-paths-heading">
+          <header className="lp-reveal"><span className="lp-eyebrow">A FREE APP. TWO WAYS TO RUN YOUR MODELS.</span><h2 id="lp-model-paths-heading">Start on your terms.</h2><p>AhPah Canvas is open source and free to use. Model access depends on where you run it.</p></header>
+          <div className="lp-model-path-grid">
+            <article className="lp-model-path lp-reveal"><span className="lp-model-path-icon"><Laptop size={23} /></span><span className="lp-path-kicker">ON YOUR COMPUTER</span><h3>Local models. No hosted token quota.</h3><p>Run models through Ollama in the local app. Requests stay on your machine; capacity and speed depend on your hardware and the model you choose.</p><ul><li><Check size={13} /> No provider API key needed</li><li><Check size={13} /> No per-request hosted model charge</li><li><Check size={13} /> Your computer supplies the compute</li></ul><button onClick={onOpenOneClickSetup}>Set up local models <ArrowRight size={15} /></button></article>
+            <article className="lp-model-path lp-reveal"><span className="lp-model-path-icon"><Plug size={23} /></span><span className="lp-path-kicker">THROUGH YOUR PROVIDER</span><h3>Your gateway. Your model catalog.</h3><p>Connect Codex, OmniRoute, Kilo, or a compatible API. Choose available models using your provider credentials or subscription.</p><ul><li><Check size={13} /> Discover models from your connection</li><li><Check size={13} /> Use the same engineering workflow</li><li><Check size={13} /> Provider prices and limits still apply</li></ul><button onClick={onOpenOneClickSetup}>Connect a provider <ArrowRight size={15} /></button></article>
+          </div>
+        </section>
 
         <section className="lp-features lp-container" id="workflow">
           <div className="lp-section-heading lp-reveal"><span className="lp-eyebrow"><span /> A WORKSPACE FOR THE WHOLE CHANGE</span><h2>Less copying code.<br /><span>More building with it.</span></h2><p>Keep your files, agent tasks, and proposed changes together.<br /> Take an idea through to something you can inspect.</p></div>
@@ -225,7 +242,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
           <div className="lp-workflow-note lp-reveal"><ShieldCheck size={14} /><p>On the web: project files, agent edits, reviews, and browser previews.<br /><span>Approved local commands require the app running on your computer.</span></p></div>
         </section>
 
-        <section className="lp-connections lp-container lp-reveal" id="providers"><div className="lp-connection-copy"><span className="lp-eyebrow"><span /> CONNECT YOUR INTELLIGENCE</span><h2>Your providers.<br /><span>Your engineering team.</span></h2><p>Connect OmniRoute, use Kilo Auto Free in the local app, or bring an OpenAI-compatible API. Choose from live model catalogs and give each task the context it needs.</p><button className="lp-button lp-button-secondary" onClick={onOpenOneClickSetup}>Set up your providers <ArrowRight size={15} /></button><div className="lp-connection-note"><ShieldCheck size={13} /><span>Workspace exports exclude provider credentials.</span></div></div><div className="lp-connection-art"><div className="lp-provider-node"><span className="lp-provider-symbol"><Radio size={24} /></span><div><strong>OmniRoute</strong><small>Your gateway. Your model catalog.</small></div><ArrowDown size={14} /></div><div className="lp-connection-line"><i /><span>YOUR PROJECT CONTEXT</span><i /></div><div className="lp-hub"><span className="lp-brand-mark"><i /><i /><i /><i /></span><strong>One project. A clear next step.</strong><span>AhPah Canvas</span></div><div className="lp-connection-line"><i /><span>LIVE MODEL CONNECTIONS</span><i /></div><div className="lp-provider-node kilo"><span className="lp-provider-symbol"><Sparkles size={24} /></span><div><strong>Kilo Auto Free</strong><small>Dynamic free routing · local app</small></div><ArrowUpRight size={14} /></div><div className="lp-custom-provider"><Plug size={13} /><span>And your own compatible API.</span><span>YOUR CHOICE</span></div></div></section>
+        <section className="lp-connections lp-container lp-reveal" id="providers"><div className="lp-connection-copy"><span className="lp-eyebrow"><span /> CONNECT YOUR INTELLIGENCE</span><h2>Your providers.<br /><span>Your engineering team.</span></h2><p>Run local Ollama models, connect Codex, OmniRoute or Kilo, or bring a compatible API. Choose available models and give each task the context it needs. Hosted access follows your provider’s prices and limits.</p><button className="lp-button lp-button-secondary" onClick={onOpenOneClickSetup}>Set up your providers <ArrowRight size={15} /></button><div className="lp-connection-note"><ShieldCheck size={13} /><span>Workspace exports exclude provider credentials.</span></div></div><div className="lp-connection-art"><div className="lp-provider-node"><span className="lp-provider-symbol"><Radio size={24} /></span><div><strong>OmniRoute</strong><small>Your gateway. Your model catalog.</small></div><ArrowDown size={14} /></div><div className="lp-connection-line"><i /><span>YOUR PROJECT CONTEXT</span><i /></div><div className="lp-hub"><span className="lp-brand-mark"><i /><i /><i /><i /></span><strong>One project. A clear next step.</strong><span>AhPah Canvas</span></div><div className="lp-connection-line"><i /><span>LIVE MODEL CONNECTIONS</span><i /></div><div className="lp-provider-node kilo"><span className="lp-provider-symbol"><Sparkles size={24} /></span><div><strong>Kilo Auto Free</strong><small>Dynamic free routing · local app</small></div><ArrowUpRight size={14} /></div><div className="lp-custom-provider"><Plug size={13} /><span>And your own compatible API.</span><span>YOUR CHOICE</span></div></div></section>
 
         <section className="lp-final-cta lp-reveal"><div className="lp-cta-grid" aria-hidden="true" /><div className="lp-cta-orb" aria-hidden="true"><i /><i /><i /></div><div className="lp-container"><span className="lp-eyebrow">FROM THE FIRST FILE TO THE NEXT CHANGE.</span><h2>Bring the idea.<br /><span>Build the software.</span></h2><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Open Code <ArrowUpRight size={17} /></button><p>Your files. Your providers. Your final review.</p></div></section>
       </div>

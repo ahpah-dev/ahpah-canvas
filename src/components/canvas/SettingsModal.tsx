@@ -30,6 +30,7 @@ import {
   type GatewayTransport,
 } from "../../utils/gateways";
 import { CustomProvidersPanel } from "./CustomProvidersPanel";
+import { LocalModelsPanel } from "./LocalModelsPanel";
 import { CodexConnectionPanel } from "./CodexConnectionPanel";
 import { OmniRouteSetupButton } from './OmniRouteSetupButton';
 import { useDialogFocus } from "../../utils/useDialogFocus";
@@ -55,6 +56,7 @@ interface SettingsModalProps {
   onToggleSimulated: (val: boolean) => void;
   onAutoConfigured: (providers: ("omniroute" | "kilo")[]) => void;
   onAddCustomProvider: (providerId: string) => void;
+  onConnectLocal: () => void;
   onConnectCodex: () => void;
   onConnectOmniRoute: () => void;
 }
@@ -109,6 +111,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleSimulated,
   onAutoConfigured,
   onAddCustomProvider,
+  onConnectLocal,
   onConnectCodex,
   onConnectOmniRoute,
 }) => {
@@ -140,7 +143,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showOmniKey, setShowOmniKey] = useState(false);
   const [showKiloKey, setShowKiloKey] = useState(false);
   const [autoOnOpen, setAutoOnOpen] = useState(
-    () => supportsLocalBridge() && localStorage.getItem("ahpah_auto_setup_on_open") !== "false",
+    () => {
+      try { return supportsLocalBridge() && localStorage.getItem("ahpah_auto_setup_on_open") === "true"; }
+      catch { return false; }
+    },
   );
   const [running, setRunning] = useState(false);
   const [omniQuickRunning, setOmniQuickRunning] = useState(false);
@@ -406,7 +412,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         aria-hidden={!isOpen}
         aria-modal="true"
         aria-labelledby="settings-title"
-        className="cw-modal flex max-h-[min(90vh,820px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#13101c] shadow-[0_32px_120px_rgba(0,0,0,.7)]"
+        className="cw-modal cw-settings-dialog flex max-h-[min(90vh,820px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#13101c] shadow-[0_32px_120px_rgba(0,0,0,.7)]"
       >
         <header className="flex items-center justify-between border-b border-white/[.07] px-6 py-5 sm:px-8">
           <div className="flex items-center gap-3.5">
@@ -487,6 +493,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onChange={() => setSaved(false)}
             className="cw-settings-body space-y-5 overflow-y-auto p-5 sm:p-8"
           >
+            <LocalModelsPanel active={isOpen} disabled={running || checkingCatalog || omniQuickRunning} providers={customProviders} onUse={(provider, destination) => {
+              try {
+                const next = [...customProviders.filter(item => item.id !== provider.id), provider];
+                if (next.length > 20) throw new Error('Remove an unused custom provider before adding local AI.');
+                saveGatewayConfig({ ...config, customProviders: next, transport: 'auto' });
+                setCustomProviders(next); setTransport('auto'); setSaveError('');
+                onToggleSimulated(false);
+                if (destination === 'code') {
+                  localStorage.setItem('ahpah_engineering_provider', `custom:${provider.id}`);
+                  window.dispatchEvent(new Event('ahpah-engineering-provider-selected'));
+                  onConnectLocal();
+                } else onAddCustomProvider(provider.id);
+              } catch (error) {
+                setSaveError(error instanceof Error ? error.message : 'Could not save the local model connection.');
+              }
+            }} />
+            <details className="cw-connection-options">
+            <summary>Hosted & custom providers <span>Codex · OmniRoute · Kilo · your API</span></summary>
+            <div>
             <CodexConnectionPanel onConnected={onConnectCodex} />
             <section className="cw-auto-setup">
               <div className="cw-auto-heading">
@@ -851,6 +876,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </section>
             </fieldset>
+            </div>
+            </details>
             {saveError && (
               <p role="alert" className="cw-inline-error">
                 {saveError}

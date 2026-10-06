@@ -1,115 +1,31 @@
-import React from "react";
-import { ArrowRight, KeyRound, X, Zap } from "lucide-react";
-import { useDialogPresence } from "../../utils/useDialogPresence";
-import { useDialogFocus } from "../../utils/useDialogFocus";
-import { OmniRouteSetupButton } from './OmniRouteSetupButton';
+import { ArrowRight, Check, Code2, Cpu, FolderOpen, Layers3, Radio, X } from 'lucide-react';
+import { useDialogPresence } from '../../utils/useDialogPresence';
+import { useDialogFocus } from '../../utils/useDialogFocus';
+import { supportsLocalBridge } from '../../utils/gateways';
+import './gettingStarted.css';
 
-interface OneClickSetupModalProps {
+interface Props {
   isOpen: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
   onApplyOneClickSetup: () => void;
-  onOmniRouteConnected: () => void;
+  onLaunchCode: () => void;
 }
 
-export const OneClickSetupModal: React.FC<OneClickSetupModalProps> = ({
-  isOpen,
-  onClose,
-  onOpenSettings,
-  onApplyOneClickSetup,
-  onOmniRouteConnected,
-}) => {
+export function OneClickSetupModal({ isOpen, onClose, onOpenSettings, onApplyOneClickSetup, onLaunchCode }: Props) {
   const present = useDialogPresence(isOpen);
   useDialogFocus(isOpen, onClose);
   if (!present) return null;
-
-  return (
-    <div
-      data-state={isOpen ? "open" : "closed"}
-      className="cw-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#03050a]/80 p-4 backdrop-blur-lg"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-hidden={!isOpen}
-        aria-modal="true"
-        aria-labelledby="setup-title"
-        className="cw-modal w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-[#0d121c] shadow-[0_32px_120px_rgba(0,0,0,.7)]"
-      >
-        <header className="flex items-center justify-between border-b border-white/[.07] px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
-              <Zap size={19} />
-            </div>
-            <div>
-              <h2
-                id="setup-title"
-                className="text-base font-semibold text-white"
-              >
-                Connect your providers
-              </h2>
-              <p className="mt-1 text-xs text-slate-400">
-                A quick setup for live model requests.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close setup"
-            className="rounded-xl p-2 text-slate-500 hover:bg-white/[.06] hover:text-white"
-          >
-            <X size={18} />
-          </button>
-        </header>
-        <div className="max-h-[calc(90vh-6rem)] space-y-4 overflow-y-auto p-6">
-          <p className="text-sm leading-relaxed text-slate-300">
-            Add your gateway details once. The model pickers will use the latest
-            catalogs available from each service.
-          </p>
-          <div className="space-y-3">
-            <OmniRouteSetupButton onConnected={onOmniRouteConnected} onOpenSettings={() => { onOpenSettings(); onClose(); }} />
-            <div className="flex gap-3 rounded-2xl border border-emerald-300/10 bg-emerald-300/[.035] p-4">
-              <KeyRound
-                size={17}
-                className="mt-0.5 shrink-0 text-emerald-200"
-              />
-              <p className="text-xs leading-relaxed text-slate-300">
-                <strong className="text-white">Kilo AI Gateway</strong>
-                <br />
-                Choose <code className="text-emerald-200">kilo-auto/free</code>.
-                Kilo updates the free model behind this route automatically; an
-                API key is optional.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-            <button
-              onClick={() => {
-                onApplyOneClickSetup();
-                onClose();
-              }}
-              className="rounded-xl px-4 py-2.5 text-xs font-medium text-slate-400 transition hover:text-white"
-            >
-              Open canvas
-            </button>
-            <button
-              onClick={() => {
-                onOpenSettings();
-                onClose();
-              }}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-200"
-            >
-              Open connection settings <ArrowRight size={14} />
-            </button>
-          </div>
-          <p className="text-center text-[11px] text-slate-500">
-            API keys are saved in this browser. Auto Free is free, subject to
-            Kilo availability and rate limits.
-          </p>
-        </div>
+  const settings = () => { onClose(); onOpenSettings(); };
+  return <div data-state={isOpen ? 'open' : 'closed'} className="cw-overlay cw-start-overlay" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <section role="dialog" aria-hidden={!isOpen} aria-modal="true" aria-labelledby="setup-title" className="cw-modal cw-start-dialog">
+      <header><div><span className="cw-start-eyebrow">GETTING STARTED</span><h2 id="setup-title">Your next idea starts here.</h2><p>A model, a project, and a goal. Everything else is in the workspace.</p></div><button type="button" onClick={onClose} aria-label="Close setup"><X size={18} /></button></header>
+      <div className="cw-start-content">
+        <section className="cw-start-step"><span className="cw-start-number">01</span><div><h3>Choose how your agent runs.</h3><div className="cw-start-choices"><button type="button" onClick={settings}><Cpu size={20} /><strong>On your computer</strong><p>Ollama models. No API quota or per-token bill.</p><span>{supportsLocalBridge() ? 'Detect installed models & set up' : 'View local setup instructions'}<ArrowRight size={13} /></span></button><button type="button" onClick={settings}><Radio size={20} /><strong>With your provider</strong><p>Codex, OmniRoute, Kilo, or a custom API.</p><span>Manage connections<ArrowRight size={13} /></span></button></div></div></section>
+        <section className="cw-start-step"><span className="cw-start-number">02</span><div><h3>Bring your project.</h3><p><FolderOpen size={14} />Import source files in Code, or start with the ready-to-edit starter. Connect a PC folder in the top bar to save your work there.</p></div></section>
+        <section className="cw-start-step"><span className="cw-start-number">03</span><div><h3>Build, review, and run.</h3><p><Check size={14} />Give Vibe Coder a goal. Inspect its actions, review changes, then preview your app. You control which changes get applied.</p><div className="cw-start-shortcuts"><span><kbd>Ctrl / ⌘ K</kbd>File & action search</span><span><kbd>Ctrl / ⌘ F</kbd>Find & replace</span></div></div></section>
       </div>
-    </div>
-  );
-};
+      <footer><button type="button" onClick={() => { onApplyOneClickSetup(); onClose(); }}><Layers3 size={14} />Open Canvas</button><button type="button" className="cw-start-primary" onClick={() => { onLaunchCode(); onClose(); }}><Code2 size={14} />Open Code<ArrowRight size={14} /></button></footer>
+    </section>
+  </div>;
+}

@@ -58,3 +58,22 @@ test("unavailable browser storage keeps provider setup accessible with safe defa
     assert.equal(defaults.omniRouteKey, "");
   } finally { restore(); }
 });
+
+test("local Ollama coding uses the installed model and avoids hidden thinking budget exhaustion", async () => {
+  const localConfig = { ...config, customProviders: [{ id: 'local-ollama', name: 'Local · Ollama', baseUrl: 'http://127.0.0.1:11434/v1', apiKey: '', model: 'installed-local-model', stream: true }] };
+  const restore = replaceGlobal('localStorage', { getItem: (key: string) => key === 'ahpah_gateway_config' ? JSON.stringify(localConfig) : null });
+  const restoreFetch = replaceGlobal('fetch', async (url: string, init: RequestInit) => {
+    assert.equal(url, '/api/gateway/custom/chat/completions');
+    assert.equal((init.headers as Record<string, string>)['X-Gateway-Url'], 'http://127.0.0.1:11434/v1');
+    const body = JSON.parse(init.body as string);
+    assert.equal(body.model, 'installed-local-model');
+    assert.equal(body.reasoning_effort, 'none');
+    assert.equal(body.max_tokens, 8192);
+    assert.equal((init.headers as Record<string, string>).Authorization, undefined);
+    return new Response(JSON.stringify({ model: body.model, choices: [{ message: { content: '{"actions":[{"tool":"list_files"}]}' } }] }), { headers: { 'content-type': 'application/json' } });
+  });
+  try {
+    const result = await sendEngineeringStep({ providerId: 'custom:local-ollama', prompt: 'List project files', messages: [], signal: new AbortController().signal });
+    assert.equal(result.model, 'installed-local-model');
+  } finally { restoreFetch(); restore(); }
+});

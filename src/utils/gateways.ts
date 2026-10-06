@@ -1,5 +1,5 @@
 import { isAutomaticModel, isFreeModel, sortModelCatalog } from "./modelCatalog.ts";
-import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS } from "./gatewayPolicy.ts";
+import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS, LOCAL_COMPLETION_TIMEOUT_MS, LOCAL_COMPLETION_TIMEOUT_MESSAGE, isLocalOllamaUrl } from "./gatewayPolicy.ts";
 import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
 import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
@@ -283,14 +283,16 @@ export async function sendGatewayPrompt(
   const custom = provider === "custom" ? config.customProviders?.find((item) => item.id === options.providerId) : undefined;
   if (provider === "custom" && !custom) throw new Error("This custom provider is no longer configured. Add it in Settings or create a card for another provider.");
   const route = endpoint(provider, config, custom);
+  const localOllama = !!custom && isLocalOllamaUrl(normalizeProviderUrl(custom.baseUrl));
   const base = route.base;
   const model = custom ? custom.model : isKilo ? config.kiloModel : config.omniRouteModel;
   const key = custom ? custom.apiKey : isKilo ? config.kiloKey : config.omniRouteKey;
   if (!model)
     throw new Error("Choose a model in Settings before sending a prompt.");
+  const completionDeadline = AbortSignal.timeout(localOllama ? LOCAL_COMPLETION_TIMEOUT_MS : COMPLETION_TIMEOUT_MS);
   const signal = AbortSignal.any([
     ...(options.signal ? [options.signal] : []),
-    AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
+    completionDeadline,
   ]);
   signal.throwIfAborted();
   const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute');
@@ -386,7 +388,7 @@ export async function sendGatewayPrompt(
     options.onProgress?.({
       text: "",
       phase: attempt || target.id !== model ? "retrying" : "waiting",
-      detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : `Waiting for ${custom?.name || (isKilo ? "Kilo" : "OmniRoute")}`,
+      detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : localOllama ? `Waiting for ${label} on this computer. The first model load can take a few minutes. Stop cancels this request.` : `Waiting for ${custom?.name || (isKilo ? "Kilo" : "OmniRoute")}`,
     });
     try {
       const reasoning = isKilo && (automatic || (options.validateResponse && hasVerifiedFreePricing(target))) ? fastReasoning(target) : undefined;
@@ -401,6 +403,8 @@ export async function sendGatewayPrompt(
           ],
           stream: custom ? custom.stream : true,
           max_tokens: maxTokens,
+          // Local thinking can otherwise exhaust the output budget before an answer.
+          ...(custom?.baseUrl === 'http://127.0.0.1:11434/v1' ? { reasoning_effort: 'none' } : {}),
           ...(nativeCoding && (!Array.isArray(target.supported_parameters) || target.supported_parameters.includes('tools')) ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
           ...(reasoning ? { reasoning } : {}),
         }),
@@ -419,7 +423,7 @@ export async function sendGatewayPrompt(
             ? `Receiving answer from ${resolvedAttemptModel}`
             : progress.phase === "reasoning"
               ? `${resolvedAttemptModel} is reasoning`
-              : `Waiting for ${resolvedAttemptModel}`,
+              : localOllama ? `Waiting for ${resolvedAttemptModel} on this computer. The first model load can take a few minutes. Stop cancels this request.` : `Waiting for ${resolvedAttemptModel}`,
         });
       });
       attemptSignal.throwIfAborted();
@@ -502,6 +506,8 @@ export async function sendGatewayPrompt(
       );
     } catch (caught) {
       clearTimeout(timer);
+      if (localOllama && !options.signal?.aborted && (completionDeadline.aborted || (caught instanceof Error && caught.name === 'TimeoutError')))
+        throw new DOMException(LOCAL_COMPLETION_TIMEOUT_MESSAGE, 'TimeoutError');
       signal.throwIfAborted();
       const error = local.signal.aborted ? local.signal.reason : caught;
       if (provider === 'omniroute' && error instanceof Error)
