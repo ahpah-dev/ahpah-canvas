@@ -215,14 +215,13 @@ export async function listKiloModels(
     signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
     cache: "no-store",
   });
-  return Array.isArray(result.data)
-    ? sortModelCatalog(
+  if (!Array.isArray(result.data)) throw new Error('Kilo did not return a valid model catalog. Retry loading live models in Settings.');
+  return sortModelCatalog(
         result.data.filter(
           (model: GatewayModel | null) =>
             model && typeof model.id === "string" && model.id.trim(),
         ),
-      )
-    : [];
+      );
 }
 
 export async function listCustomModels(provider: CustomProvider, config: GatewayConfig, signal?: AbortSignal): Promise<GatewayModel[]> {
@@ -246,6 +245,7 @@ export async function sendGatewayPrompt(
   prompt: string,
   config: GatewayConfig,
   options: {
+    runId?: string;
     signal?: AbortSignal;
     maxTokens?: number;
     messages?: { role: "user" | "assistant" | "system"; content: string }[];
@@ -269,6 +269,8 @@ export async function sendGatewayPrompt(
     ...(options.signal ? [options.signal] : []),
     AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
   ]);
+  signal.throwIfAborted();
+  const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute');
   const maxTokens = options.maxTokens ?? (isKilo ? 8192 : 2048);
   const omniAutomatic = provider === 'omniroute' && isAutomaticModel({ id: model }) && isFreeModel({ id: model });
   let automatic = (isKilo && model === "kilo-auto/free") || omniAutomatic;
@@ -335,6 +337,7 @@ export async function sendGatewayPrompt(
       "Content-Type": "application/json",
       ...authHeaders(key),
       ...route.headers,
+      ...(isKilo && options.runId && /^[a-zA-Z0-9_-]{1,100}$/.test(options.runId) ? { 'X-KiloCode-TaskId': options.runId } : {}),
     },
   };
   const attempts = omniAutomatic ? 6 : automatic ? 3 : 1;
@@ -366,13 +369,16 @@ export async function sendGatewayPrompt(
           ],
           stream: custom ? custom.stream : true,
           max_tokens: maxTokens,
-          ...(provider === 'omniroute' && options.validateResponse ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
+          ...(nativeCoding && (!Array.isArray(target.supported_parameters) || target.supported_parameters.includes('tools')) ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
           ...(reasoning ? { reasoning } : {}),
         }),
       }, (progress) => {
         if (progress.model) resolvedAttemptModel = progress.model;
-        if (progress.text.trim() || (options.validateResponse && progress.phase === 'answer')) {
-          hasAnswer = true;
+        if (progress.text.trim() || (nativeCoding && progress.phase === 'answer')) {
+          // Native fragments have not been executed or shown as a user answer.
+          // Stop their first-answer watchdog, while permitting safe free fallback
+          // if their eventual complete arguments are invalid or truncated.
+          hasAnswer ||= !!progress.text.trim();
           clearTimeout(timer);
         }
         options.onProgress?.({
@@ -384,6 +390,7 @@ export async function sendGatewayPrompt(
               : `Waiting for ${resolvedAttemptModel}`,
         });
       });
+      attemptSignal.throwIfAborted();
       const choice = result.choices?.[0];
       const message = choice?.message;
       const resolvedModel =
@@ -395,20 +402,26 @@ export async function sendGatewayPrompt(
         throw new Error(
           `Gateway error: ${choice.error.message || "Provider failed to generate an answer."}`,
         );
-      if (
-        !message || typeof message !== "object" || Array.isArray(message)
-      )
-        throw new Error(
+      if (message === undefined || message === null)
+        throw new EmptyCompletionError(
           `${resolvedModel} returned an empty response without a completion message. Try again or choose another model.`,
+          resolvedModel,
         );
+      if (typeof message !== 'object' || Array.isArray(message))
+        throw new Error(`${resolvedModel} returned an invalid completion format.`);
       if (
         message.content != null &&
         typeof message.content !== "string" && !Array.isArray(message.content)
       )
         throw new Error(`${resolvedModel} returned an invalid completion format.`);
-      if (provider === 'omniroute' && options.validateResponse && message.tool_calls?.length && choice?.finish_reason === 'length')
-        throw new EmptyCompletionError(`${resolvedModel} reached the ${maxTokens.toLocaleString()} token limit before completing its coding tools.`, resolvedModel, 'token_limit');
-      const text = (provider === 'omniroute' && options.validateResponse ? omniToolActions(message.tool_calls) : undefined) ?? answerText(message?.content);
+      if (nativeCoding && choice?.finish_reason === 'length')
+        throw new EmptyCompletionError(`${resolvedModel} reached the ${maxTokens.toLocaleString()} token limit before completing its coding response. Any partial source has been kept; no truncated actions were executed.`, resolvedModel, 'token_limit');
+      let nativeActions: string | undefined;
+      if (nativeCoding) {
+        try { nativeActions = omniToolActions(message.tool_calls); }
+        catch (failure) { throw new UnusableCodingResponseError(`${resolvedModel} returned unusable coding tools: ${failure instanceof Error ? failure.message : 'Invalid tool arguments'}`, resolvedModel); }
+      }
+      const text = nativeActions ?? answerText(message?.content);
       const refusal = answerText(message?.refusal);
       if (choice?.finish_reason === "content_filter")
         throw new Error(
@@ -463,11 +476,23 @@ export async function sendGatewayPrompt(
         Object.defineProperty(error, 'message', { value: omniRouteErrorMessage(error.message), configurable: true });
       if (error instanceof Error && key && error.message.includes(key))
         Object.defineProperty(error, "message", { value: redactProviderError(error.message, [key]), configurable: true });
+      if (isKilo && error instanceof GatewayServiceError) {
+        const guidance: Record<number, string> = {
+          401: key ? 'Update the Kilo API key in Settings, then retry.' : 'Add your Kilo API key in Settings, or choose an available anonymous free model.',
+          402: 'This Kilo account has insufficient balance. Choose Auto Free or another verified free model, or update the account balance.',
+          403: 'Check the Kilo account or organization model permissions before retrying.',
+          429: 'Wait before retrying. Anonymous Kilo access has an IP rate limit; adding your Kilo API key in Settings can use your account limits.',
+        };
+        if (guidance[error.status || 0]) error.message += ` ${guidance[error.status || 0]}`;
+      }
       const recoverable = error instanceof UnusableCodingResponseError || error instanceof NoAnswerError || error instanceof EmptyCompletionError ||
         (error instanceof GatewayServiceError && [404, 408, 410, 500, 502, 503, 504].includes(error.status || 0)) ||
         (omniAutomatic && error instanceof Error && !omniGatewayAuthFailure(error.message) &&
           (unavailableOmniProvider(error.message) || (error instanceof GatewayServiceError && [401, 403, 429].includes(error.status || 0))));
-      if (!automatic || (hasAnswer && !(error instanceof UnusableCodingResponseError)) || !recoverable) throw error;
+      // Never replace text already streamed to the user, even if the response
+      // later contains invalid coding tools. Native-only proposals remain safe
+      // to retry because their fragments have neither executed nor shown text.
+      if (!automatic || hasAnswer || !recoverable) throw error;
       if (isKilo && error instanceof EmptyCompletionError && error.reason === 'token_limit' && target.id === model && attempt < 2) {
         await nextFreeModel();
         const instant = fallbackModels?.find(item => item.id === error.model && !excluded.has(item.id)

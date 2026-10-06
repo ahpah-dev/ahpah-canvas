@@ -24,6 +24,7 @@ export const sendEngineeringStep: AgentSender = async (request) => {
   if (!custom && !["kilo", "omniroute"].includes(request.providerId))
     throw new Error("Choose a configured coding provider in Settings.");
   return sendGatewayPrompt(custom ? "custom" : request.providerId as "kilo" | "omniroute", request.prompt, config, {
+    runId: request.runId,
     signal: request.signal,
     messages: request.messages,
     maxTokens: 8192,

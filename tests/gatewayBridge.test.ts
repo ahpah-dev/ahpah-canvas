@@ -171,3 +171,25 @@ test("disconnecting the client cancels the upstream stream", async (t) => {
   controller.abort();
   await closed;
 });
+
+test('Kilo bridge forwards only a validated stable task header with the API credentials', async t => {
+  const originalFetch = globalThis.fetch;
+  const forwarded: Record<string, string>[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).startsWith('https://api.kilo.ai/api/gateway/')) {
+      forwarded.push(init!.headers as Record<string, string>);
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'READY' } }] }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(input, init);
+  });
+  const bridge = createServer((request, response) => { void gatewayMiddleware(request, response, () => response.end()); });
+  t.after(() => { bridge.closeAllConnections(); bridge.close(); });
+  const origin = await listen(bridge);
+  for (const taskId of ['coding-run-123', 'bad/task:id']) {
+    const response = await fetch(`${origin}/api/gateway/kilo/chat/completions`, { method: 'POST', headers: { Origin: origin, 'X-KiloCode-TaskId': taskId, Authorization: 'Bearer fixture-key' }, body: '{"model":"kilo-auto/free"}' });
+    assert.equal(response.status, 200); await response.json();
+  }
+  assert.equal(forwarded[0]['X-KiloCode-TaskId'], 'coding-run-123');
+  assert.equal(forwarded[0].Authorization, 'Bearer fixture-key');
+  assert.equal(forwarded[1]['X-KiloCode-TaskId'], undefined);
+});

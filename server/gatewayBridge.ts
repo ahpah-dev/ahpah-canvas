@@ -113,6 +113,10 @@ export async function gatewayMiddleware(
     };
     if (request.headers.authorization)
       headers.Authorization = request.headers.authorization;
+    if (match[1] === 'kilo') {
+      const taskId = request.headers['x-kilocode-taskid'];
+      if (typeof taskId === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(taskId)) headers['X-KiloCode-TaskId'] = taskId;
+    }
     const upstream = await fetch(
       `${normalizedBase}/${match[2]}${route.search}`,
       {
