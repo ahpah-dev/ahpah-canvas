@@ -295,7 +295,10 @@ export async function sendGatewayPrompt(
     completionDeadline,
   ]);
   signal.throwIfAborted();
-  const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute');
+  const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute' || localOllama);
+  // Accept native replies without requiring installed text-only Ollama models
+  // to support advertised tools. Both formats use the same validated runtime.
+  const advertiseNativeTools = nativeCoding && !localOllama;
   const maxTokens = options.maxTokens ?? (isKilo ? 8192 : 2048);
   const omniAutomatic = provider === 'omniroute' && isAutomaticModel({ id: model }) && isFreeModel({ id: model });
   let automatic = (isKilo && model === "kilo-auto/free") || omniAutomatic;
@@ -404,8 +407,8 @@ export async function sendGatewayPrompt(
           stream: custom ? custom.stream : true,
           max_tokens: maxTokens,
           // Local thinking can otherwise exhaust the output budget before an answer.
-          ...(custom?.baseUrl === 'http://127.0.0.1:11434/v1' ? { reasoning_effort: 'none' } : {}),
-          ...(nativeCoding && (!Array.isArray(target.supported_parameters) || target.supported_parameters.includes('tools')) ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
+          ...(localOllama ? { reasoning_effort: 'none', ...(!nativeCoding ? { tool_choice: 'none' } : {}) } : {}),
+          ...(advertiseNativeTools && (!Array.isArray(target.supported_parameters) || target.supported_parameters.includes('tools')) ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
           ...(reasoning ? { reasoning } : {}),
         }),
       }, (progress) => {

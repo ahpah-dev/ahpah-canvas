@@ -22,7 +22,14 @@ export const omniCodingTools = [
 export function omniToolActions(calls: unknown): string | undefined {
   if (!Array.isArray(calls) || !calls.length) return undefined;
   if (calls.length > 8) throw new Error('The model returned more than 8 coding tools.');
-  const names: Record<string, string> = { read: 'read_file', glob: 'list_files', grep: 'search_files', edit: 'replace_in_file', write: 'write_file', bash: 'run_command', plan: 'plan', finish: 'finish', export_html: 'export_html' };
+  const names: Record<string, string> = {
+    read: 'read_file', glob: 'list_files', grep: 'search_files', edit: 'replace_in_file', write: 'write_file', bash: 'run_command',
+    // Also accept the canonical names documented in the coding instructions.
+    read_file: 'read_file', list_files: 'list_files', search_files: 'search_files',
+    replace_in_file: 'replace_in_file', write_file: 'write_file', delete_file: 'delete_file',
+    run_command: 'run_command', save_files: 'save_files',
+    plan: 'plan', finish: 'finish', export_html: 'export_html',
+  };
   const actions = calls.map(call => {
     const fn = call?.function;
     if (!fn || typeof fn.name !== 'string' || !Object.hasOwn(names, fn.name) || typeof fn.arguments !== 'string') throw new Error('The model returned an unsupported coding tool.');
