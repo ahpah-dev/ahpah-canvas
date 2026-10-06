@@ -19,6 +19,7 @@ An open source agentic coding workspace with real project files, an editor, visi
 - Kilo Auto Free recovery that checks the live catalog and uses verified free routes when a route stalls or returns an empty answer.
 - Kilo coding compatibility checks, consistent free routing during each agent run, and automatic recovery from repeated actions without discarding staged source.
 - An infinite canvas with drag, resize, pan, zoom, minimap, card arrangement, and shared project memory.
+- Named Canvas agents with software engineering, interface design, backend, planning, review, and custom specializations. Saved roles and working instructions guide actual agent runs.
 - Notes, embedded previews, saved command snippets, workspace import and export, and browser-local persistence.
 - Midnight, Graphite, and Daylight themes, custom accents, grid styles, and motion preferences that respect reduced-motion settings.
 - A coding-focused landing page, clear Code/Canvas navigation, and restrained feedback and motion.
@@ -75,6 +76,8 @@ The agent operates on the project files held by this workspace. It can list, rea
 Imported projects support up to **200 text files**, **256 KB per file**, and **2 MB total**. Generated folders, `.git`, `node_modules`, private `.env` files, and key files are excluded. Importing copies source into the workspace; applying a proposal does not edit the original folder on your computer.
 
 ### Canvas coding and automatic PC saving
+
+Click the **pencil icon** in an agent card's header to give it a name, select a specialization, and add working instructions. Custom specialists can have their own role label. Agent identities persist with your workspace and travel with workspace exports; existing cards start with the software engineer specialization. Specialization guides the model's work while preserving the normal tool, source review, and command approval rules.
 
 Open **Connect folder** in the workspace's top bar, choose a local folder, and grant read/write permission. Desktop Chrome and Edge support this connection on localhost and the HTTPS Pages site. The directory handle is remembered in IndexedDB; if the browser revokes permission, click **Reconnect folder** before exporting again.
 

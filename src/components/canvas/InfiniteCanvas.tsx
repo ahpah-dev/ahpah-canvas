@@ -24,6 +24,8 @@ import {
   ChevronDown,
   X,
   Focus,
+  ArrowUpRight,
+  ShieldCheck,
 } from "lucide-react";
 import type {
   CanvasCard,
@@ -45,6 +47,7 @@ import { cardName } from "../../utils/cardPresentation";
 import { loadGatewayConfig } from "../../utils/gateways";
 import { createFrameQueue } from "../../utils/interactionScheduling";
 import "./canvas.css";
+import "./workspacePolish.css";
 import {
   loadAppearance,
   saveAppearance,
@@ -146,6 +149,9 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   const [handTool, setHandTool] = useState(false);
   const [moving, setMoving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const addToggle = useRef<HTMLButtonElement>(null);
+  const addClose = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (addOpen) addClose.current?.focus(); }, [addOpen]);
   const menuRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{
     kind: "pan" | "drag" | "resize";
@@ -206,7 +212,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
       if (target.closest(".cw-card") && !event.ctrlKey && !event.metaKey)
         return;
       if (
-        target.closest("button,input,textarea,select,.cw-toolbar,.cw-add-menu")
+        target.closest("button,input,textarea,select,.cw-toolbar,.cw-add-menu,.cw-empty-workspace")
       )
         return;
       event.preventDefault();
@@ -276,7 +282,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     const target = event.target as HTMLElement;
     if (
       target.closest(
-        "button,input,textarea,select,a,iframe,.cw-toolbar,.cw-add-menu,.cw-minimap",
+        "button,input,textarea,select,a,iframe,.cw-toolbar,.cw-add-menu,.cw-minimap,.cw-empty-workspace",
       )
     )
       return;
@@ -403,6 +409,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     138 / (miniBounds.right - miniBounds.left + 100),
     76 / (miniBounds.bottom - miniBounds.top + 100),
   );
+  const selectedCard = cards.find(card => card.id === selectedCardId);
 
   return (
     <div
@@ -426,33 +433,38 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
     >
       <div className="cw-stage-glow" aria-hidden="true" />
       <div className="cw-workspace-label">
-        <span className="cw-dot" /> My workspace{" "}
-        <span className="cw-workspace-badge">
-          {props.isSimulated ? "Demo simulation" : "Live gateways"}
-        </span>
+        <span className="cw-stage-eyebrow">YOUR ENGINEERING WORKSPACE</span>
+        <div><h1>Project canvas</h1><span className="cw-workspace-badge">{props.isSimulated ? "Demo simulation" : `${cards.length} ${cards.length === 1 ? 'card' : 'cards'} · ${connections.length} connections`}</span></div>
       </div>
       <div className="cw-top-actions" ref={menuRef}>
+        <button className="cw-soft-button cw-open-code" onClick={() => props.onOpenCode(selectedCard?.type === 'agent' ? selectedCard.id : undefined)}><Code2 size={14} /> Open Code <ArrowUpRight size={12} /></button>
         <button className="cw-soft-button" onClick={props.onOpenSettings}>
           <Radio size={13} /> Connections
         </button>
         <button
           className="cw-primary-button"
+          ref={addToggle}
           aria-expanded={addOpen}
+          aria-controls="cw-add-card-dialog"
+          aria-haspopup="dialog"
           onClick={() => setAddOpen(!addOpen)}
         >
           <Plus size={14} /> Add card <ChevronDown size={12} />
         </button>
         {addOpen && (
-          <div className="cw-add-menu">
+          <div id="cw-add-card-dialog" className="cw-add-menu" role="dialog" aria-label="Add a canvas card" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAddOpen(false); addToggle.current?.focus(); } }}>
             <div className="cw-menu-heading">
               ADD TO YOUR WORKSPACE{" "}
               <button
+                ref={addClose}
                 aria-label="Close add menu"
-                onClick={() => setAddOpen(false)}
+                onClick={() => { setAddOpen(false); addToggle.current?.focus(); }}
               >
                 <X size={13} />
               </button>
             </div>
+            <p className="cw-menu-description">Choose a teammate or bring project context into view.</p>
+            <span className="cw-menu-category">CODING AGENTS</span>
             <button onClick={() => add("agent", "omniroute")}>
               <span className="cw-icon-tile">
                 <Radio size={17} />
@@ -494,6 +506,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
               <ChevronDown size={13} />
             </button>
             <div className="cw-menu-divider" />
+            <span className="cw-menu-category">PROJECT CONTEXT</span>
             <button onClick={() => add("note")}>
               <span className="cw-icon-tile amber">
                 <FileText size={17} />
@@ -576,16 +589,15 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
       {!cards.length && (
         <div className="cw-empty-workspace">
           <LayersIcon />
-          <h2>A little space for your next idea.</h2>
-          <p>Add an agent, jot down a thought, or bring in a preview.</p>
-          <button
-            className="cw-primary-button"
-            onClick={() => add("agent", "omniroute")}
-          >
-            <Plus size={15} /> Add your first agent
-          </button>
+          <span className="cw-stage-eyebrow">FROM IDEA TO WORKING SOFTWARE</span>
+          <h2>Give your next project<br />a place to take shape.</h2>
+          <p>Build with coding agents. Keep decisions, source files, and previews connected in one workspace.</p>
+          <div className="cw-empty-actions"><button className="cw-primary-button" onClick={() => setAddOpen(true)}><Plus size={15} /> Choose a coding agent</button><button className="cw-soft-button" onClick={() => props.onOpenCode()}><Code2 size={15} /> Open Code</button></div>
+          <div className="cw-empty-options"><button onClick={() => add('note')}><FileText size={17} /><strong>Capture a brief</strong><span>Goals, ideas, and decisions</span></button><button onClick={() => add('browser')}><Globe size={17} /><strong>Bring a preview</strong><span>See your work in context</span></button><button onClick={props.onOpenSettings}><Radio size={17} /><strong>Connect models</strong><span>Your provider, your choice</span></button></div>
+          <small className="cw-empty-assurance"><ShieldCheck size={12} /> Real project files · visible agent actions · changes you review</small>
         </div>
       )}
+      {selectedCard && <div className="cw-selection-context"><span className="cw-stage-eyebrow">SELECTED</span><strong title={cardName(selectedCard)}>{cardName(selectedCard)}</strong><button onClick={() => focus(selectedCard.id)} title="Focus selected card"><Focus size={13} /> Focus</button>{selectedCard.type === 'agent' && <button onClick={() => props.onOpenCode(selectedCard.id)}><Code2 size={13} /> Open source</button>}<button aria-label="Clear selected card" onClick={() => onSelectCard(null)}><X size={13} /></button></div>}
       <div className="cw-toolbar" aria-label="Canvas controls">
         <button
           aria-label="Select tool"
@@ -602,7 +614,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
           <Move size={15} />
         </button>
         <i />
-        <button aria-label="Arrange cards" onClick={arrange}>
+        <button aria-label="Arrange cards" title="Arrange cards into a grid" disabled={!cards.length} onClick={arrange}>
           <LayoutGrid size={15} />
         </button>
         <button

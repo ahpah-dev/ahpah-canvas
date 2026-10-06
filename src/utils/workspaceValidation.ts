@@ -1,4 +1,5 @@
 import type { AgentType, CanvasCard, Connection, MemoryItem } from "../types/canvas";
+import { AGENT_SPECIALIZATIONS, hasIdentityControlCharacters } from './agentIdentity.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -22,6 +23,7 @@ const cardFields = [
   "tokensUsed", "cpuPercent", "lastAction", "parentId", "pinned", "minimized",
   "browserUrl", "browserDevice", "noteContent", "cliCommand", "routedModel",
   "modelSource", "legacyMigrated", "compressionSavedPercent", "pendingCommands",
+  "agentName", "specialization", "agentInstructions",
 ] satisfies (keyof CanvasCard)[];
 const lineFields = ["id", "text", "type", "timestamp"];
 
@@ -46,6 +48,10 @@ export function validateCards(value: unknown): CanvasCard[] {
       Number(card.tokensUsed) < 0 ||
       Number(card.cpuPercent) < 0 ||
       !optionalEnum(card.agentType, agentTypes) ||
+      !optionalEnum(card.specialization, AGENT_SPECIALIZATIONS.map(item => item.id)) ||
+      (card.agentName !== undefined && (typeof card.agentName !== 'string' || !card.agentName.trim() || card.agentName.length > 60 || hasIdentityControlCharacters(card.agentName))) ||
+      (card.agentInstructions !== undefined && (typeof card.agentInstructions !== 'string' || card.agentInstructions.length > 4000 || card.agentInstructions.includes('\0'))) ||
+      (card.specialization === 'custom' && (typeof card.role !== 'string' || !card.role.trim() || card.role.length > 80 || hasIdentityControlCharacters(card.role))) ||
       !optionalEnum(card.status, ["idle", "working", "thinking", "approval_required", "tests_passing", "error"]) ||
       !optionalEnum(card.browserDevice, ["desktop", "mobile"]) ||
       !optionalEnum(card.modelSource, ["live"]) ||

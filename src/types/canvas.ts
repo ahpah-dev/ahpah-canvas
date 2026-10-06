@@ -1,6 +1,7 @@
 export type CardType = 'agent' | 'terminal' | 'browser' | 'note';
 
 export type AgentStatus = 'idle' | 'working' | 'thinking' | 'approval_required' | 'tests_passing' | 'error';
+export type AgentSpecialization = 'coding' | 'design' | 'backend' | 'planning' | 'review' | 'custom';
 
 export type AgentType =
   | 'omniroute'
@@ -32,6 +33,9 @@ export interface CanvasCard {
   height: number;
   title: string;
   agentType?: AgentType;
+  agentName?: string;
+  specialization?: AgentSpecialization;
+  agentInstructions?: string;
   providerId?: string;
   providerName?: string;
   status?: AgentStatus;

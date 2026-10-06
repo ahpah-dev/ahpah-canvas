@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor } from 'lucide-react';
+import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search } from 'lucide-react';
 import type { AgentActivity, AgentPhase, AgentSender, EngineeringChangeSet, EngineeringProject, EngineeringProvider, ProjectChange } from '../../types/engineering';
 import { applyProjectChanges, buildProjectPreview, createChangeSet, createProjectZip, createStarterProject, importSourceFiles, inverseProjectChanges, normalizeProjectPath, PROJECT_STORAGE_KEY, projectByteSize, validateChangeSet, validateEngineeringProject } from '../../utils/projectFiles';
 import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRuntime';
@@ -104,6 +104,9 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const [executionBusy, setExecutionBusy] = useState(false);
   const [execution, setExecution] = useState<ExecutionResult | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [fileQuery, setFileQuery] = useState('');
+  const explorerToggle = useRef<HTMLButtonElement | null>(null);
+  const fileSearch = useRef<HTMLInputElement | null>(null);
   const agentController = useRef<AbortController | null>(null);
   const executionController = useRef<AbortController | null>(null);
   const runSession = useRef(0);
@@ -120,6 +123,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const previewMessageRef = useRef({ channel: previewChannel, key: previewMessageKey });
   const alive = useRef(true);
   const projectFiles = useMemo(() => project.files, [project.files]);
+  const visibleFiles = useMemo(() => projectFiles.filter(file => file.path.toLowerCase().includes(fileQuery.trim().toLowerCase())), [projectFiles, fileQuery]);
   const deferredFiles = useDeferredValue(projectFiles);
   const activeFile = projectFiles.find(file => file.path === selectedPath) ?? projectFiles[0];
   const activeChange = pending?.changes.find(change => change.path === selectedChangePath) ?? pending?.changes[0];
@@ -136,6 +140,18 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const saveStatus = protectSavedCopy || storageError ? 'error' : savedSnapshot?.project === project && savedSnapshot?.pending === pending ? 'saved' : 'saving';
   const canExecute = localExecution && executionAvailable;
   useDialogFocus(Boolean(fileDialog || commandApproval), () => { setFileDialog(null); setCommandApproval(false); });
+
+  useEffect(() => {
+    if (!sidebarOpen || fileDialog || commandApproval) return;
+    fileSearch.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setSidebarOpen(false);
+      explorerToggle.current?.focus();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [sidebarOpen, fileDialog, commandApproval]);
 
   useLayoutEffect(() => { projectRef.current = project; persistenceRef.current = { project, pending, protectSavedCopy }; }, [project, pending, protectSavedCopy]);
   useLayoutEffect(() => { previewMessageRef.current = { channel: previewChannel, key: previewMessageKey }; }, [previewChannel, previewMessageKey]);
@@ -432,11 +448,14 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     {(notice || storageError) && <div className={`eng-notice ${storageError ? 'eng-notice-error' : ''}`} role="status"><AlertCircle size={14} /><span>{storageError || notice}</span>{!storageError && <button aria-label="Dismiss message" onClick={() => setNotice('')}><X size={14} /></button>}</div>}
 
     <div className="eng-body">
-      <aside className={`eng-files ${sidebarOpen ? 'eng-files-open' : ''}`} aria-label="Project files">
-        <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy || folderSaving}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }} disabled={folderSaving}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => setSidebarOpen(false)}><X size={14} /></button></div></div>
+      {sidebarOpen && <button className="eng-explorer-scrim" aria-label="Close file explorer" onClick={() => { setSidebarOpen(false); explorerToggle.current?.focus(); }} />}
+      <aside id="eng-file-explorer" className={`eng-files ${sidebarOpen ? 'eng-files-open' : ''}`} aria-label="Project files">
+        <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy || folderSaving}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }} disabled={folderSaving}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => { setSidebarOpen(false); explorerToggle.current?.focus(); }}><X size={14} /></button></div></div>
+        <label className="eng-file-search"><Search size={13} aria-hidden="true" /><input ref={fileSearch} type="search" aria-label="Search project files" placeholder="Find a file…" value={fileQuery} onChange={event => setFileQuery(event.target.value)} /></label>
         <div className="eng-file-tree">
           <span className="eng-tree-root"><ChevronRight size={12} /> {project.name}</span>
-          {projectFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} onClick={() => { setSelectedPath(file.path); setTab('code'); setSidebarOpen(false); }} title={file.path}><FileCode2 size={13} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) && <span className="eng-file-change-dot" title="Proposed change" />}</button>)}
+          {visibleFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} aria-current={activeFile?.path === file.path ? 'true' : undefined} onClick={() => { setSelectedPath(file.path); setTab('code'); setSidebarOpen(false); explorerToggle.current?.focus(); }} title={file.path}><FileCode2 size={13} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) && <span className="eng-file-change-dot" title="Proposed change" />}</button>)}
+          {projectFiles.length > 0 && !visibleFiles.length && <p className="eng-empty-tree" role="status">No matching files.<button className="eng-clear-search" onClick={() => { setFileQuery(''); fileSearch.current?.focus(); }}>Clear search</button></p>}
           {!projectFiles.length && <p className="eng-empty-tree">Your project has no files. Add a file or ask the agent to build one.</p>}
         </div>
         <div className="eng-project-meta"><span>{projectFiles.length} source files</span><span>{(projectByteSize(projectFiles) / 1024).toFixed(1)} KB</span></div>
@@ -451,7 +470,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
           if (index < 0 || (event.target as HTMLElement).getAttribute('role') !== 'tab') return;
           event.preventDefault(); setTab(ordered[index]); document.getElementById(`eng-tab-${ordered[index]}`)?.focus();
         }}>
-          <button className="eng-file-toggle" aria-label="Open file explorer" onClick={() => setSidebarOpen(true)}><Files size={14} /></button>
+          <button ref={explorerToggle} className="eng-file-toggle" aria-label="Open file explorer" aria-expanded={sidebarOpen} aria-controls="eng-file-explorer" onClick={() => setSidebarOpen(true)}><Files size={14} /></button>
           {([{ id: 'code', label: 'Code', icon: Code2 }, { id: 'changes', label: 'Changes', icon: GitCompareArrows }, { id: 'preview', label: 'Preview', icon: Eye }, { id: 'terminal', label: 'Terminal', icon: Terminal }] as const).map(item => <button key={item.id} id={`eng-tab-${item.id}`} role="tab" tabIndex={tab === item.id ? 0 : -1} aria-selected={tab === item.id} aria-controls={`eng-panel-${item.id}`} className={tab === item.id ? 'eng-tab-active' : ''} onClick={() => setTab(item.id)}><item.icon size={14} />{item.label}{item.id === 'changes' && pendingCount > 0 && <span className="eng-count">{pendingCount}</span>}</button>)}
           <div className="eng-tab-spacer" />
           <button className="eng-undo" onClick={undoAccepted} disabled={!undo.length || busy || executionBusy || folderSaving} title="Undo the last accepted change"><Undo2 size={13} /><span>Undo</span></button>
@@ -476,7 +495,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         </section>}
 
         {tab === 'preview' && <section id="eng-panel-preview" role="tabpanel" aria-labelledby="eng-tab-preview" className="eng-preview-panel">
-          <div className="eng-preview-toolbar"><span className="eng-preview-address"><span />{useBuiltPreview && previewUrl ? 'Local build preview' : previewEntry}</span><div>{previewUrl && <button className="eng-button" onClick={() => setUseBuiltPreview(previous => !previous)}>{useBuiltPreview ? 'HTML source' : 'Built project'}</button>}<select aria-label="Preview HTML entry" value={previewEntry} onChange={event => { setPreviewEntry(event.target.value); setUseBuiltPreview(false); }}>{htmlEntries.length ? htmlEntries.map(file => <option key={file.path} value={file.path}>{file.path}</option>) : <option value="index.html">No HTML entry</option>}</select><button aria-label="Desktop preview" className={previewDevice === 'desktop' ? 'eng-preview-selected' : ''} onClick={() => setPreviewDevice('desktop')}><Monitor size={14} /></button><button aria-label="Mobile preview" className={previewDevice === 'mobile' ? 'eng-preview-selected' : ''} onClick={() => setPreviewDevice('mobile')}><Smartphone size={14} /></button><button aria-label="Reload preview" title="Reload preview" onClick={() => setPreviewRevision(previous => previous + 1)}><RotateCcw size={13} /></button></div></div>
+          <div className="eng-preview-toolbar"><span className="eng-preview-address"><span />{useBuiltPreview && previewUrl ? 'Local build preview' : previewEntry}</span><div>{previewUrl && <button className="eng-button" onClick={() => setUseBuiltPreview(previous => !previous)}>{useBuiltPreview ? 'HTML source' : 'Built project'}</button>}<select aria-label="Preview HTML entry" value={previewEntry} onChange={event => { setPreviewEntry(event.target.value); setUseBuiltPreview(false); }}>{htmlEntries.length ? htmlEntries.map(file => <option key={file.path} value={file.path}>{file.path}</option>) : <option value="index.html">No HTML entry</option>}</select><button aria-label="Desktop preview" aria-pressed={previewDevice === 'desktop'} className={previewDevice === 'desktop' ? 'eng-preview-selected' : ''} onClick={() => setPreviewDevice('desktop')}><Monitor size={14} /></button><button aria-label="Mobile preview" aria-pressed={previewDevice === 'mobile'} className={previewDevice === 'mobile' ? 'eng-preview-selected' : ''} onClick={() => setPreviewDevice('mobile')}><Smartphone size={14} /></button><button aria-label="Reload preview" title="Reload preview" onClick={() => setPreviewRevision(previous => previous + 1)}><RotateCcw size={13} /></button></div></div>
           {(!useBuiltPreview && preview.issues.length > 0 || previewErrors.length > 0) && <div className="eng-preview-issues" role="status">{[...(useBuiltPreview ? [] : preview.issues), ...previewErrors].map((issue, index) => <p key={index}><AlertCircle size={12} />{issue}</p>)}</div>}
           {(useBuiltPreview && previewUrl) || preview.html ? <div className={`eng-preview-surface eng-preview-${previewDevice}`}><iframe key={`${previewRevision}-${useBuiltPreview}`} ref={previewFrame} title="Project preview" sandbox="allow-scripts" {...(useBuiltPreview && previewUrl ? { src: previewUrl } : { srcDoc: preview.html })} /></div> : <div className="eng-panel-empty"><Eye size={32} /><h2>Preview your working project.</h2><p>Add an HTML entry for instant browser preview. For React or TypeScript, approve a local build in Terminal to preview its compiled output.</p><button className="eng-button" onClick={() => setTab('terminal')}><Terminal size={14} />Open Terminal</button></div>}
           <footer className="eng-preview-footer"><ShieldCheck size={12} />Isolated preview · accepted files only · local CSS and JavaScript resolved</footer>
@@ -510,8 +529,9 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         </div>
         {(model || phase) && <div className="eng-run-meta"><span className={`eng-phase-${phase ?? 'ready'}`}>{phase ? phaseLabel[phase] : 'Ready'}</span>{model && <span title={model}>{model}</span>}{tokens > 0 && <span>{tokens.toLocaleString()} tokens</span>}</div>}
         <form className="eng-composer" onSubmit={beginGoal}>
-          <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? '20 steps · 10 min budget' : 'Read only'}</span></div>
+          <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" aria-pressed={goalMode === 'build'} className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" aria-pressed={goalMode === 'explain'} className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? '20 steps · 10 min budget' : 'Read only'}</span></div>
           <textarea aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy || folderSaving} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+          <div className="eng-composer-hint"><span>Ctrl / ⌘ + Enter to submit</span><span aria-label={`${goal.length} of ${AGENT_MAX_GOAL_CHARS} characters`}>{goal.length.toLocaleString()} / {AGENT_MAX_GOAL_CHARS.toLocaleString()}</span></div>
           <div className="eng-composer-actions"><label><span className="eng-sr-only">Engineering provider</span><select aria-label="Engineering provider" value={chosenProviderId} onChange={event => setProviderId(event.target.value)} disabled={busy || folderSaving}>{providers.length ? providers.map(provider => <option key={provider.id} value={provider.id}>{provider.label}{provider.model ? '' : ' · configure'}</option>) : <option value="">Configure a provider</option>}</select></label>{busy ? <button type="button" className="eng-stop-button" onClick={() => agentController.current?.abort()}><Square size={11} />Stop</button> : <button type="submit" className="eng-build-button" disabled={!goalReady || executionBusy || folderSaving}>{exportRequest ? 'Save HTML' : goalMode === 'build' ? 'Build' : 'Explain'}<ArrowRight size={14} /></button>}</div>
           <div className="eng-provider-model">{activeProvider?.model ? <><span className="eng-connection-dot" />{activeProvider.model}</> : <button type="button" onClick={onOpenSettings}>Choose a model in Settings <ExternalLink size={10} /></button>}</div>
         </form>

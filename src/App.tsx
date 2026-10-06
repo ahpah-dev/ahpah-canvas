@@ -35,6 +35,7 @@ import { conversationHtml, htmlExportRequest, htmlTitle, projectHtmlArtifact, re
 import type { HtmlArtifact } from './utils/htmlExport';
 import { autoSaveHtmlToFolder, autoSaveFilesToFolder } from './utils/connectedFolder';
 import { loadCanvasProject, projectForCanvas, runCanvasAgent, saveCanvasProject } from './utils/canvasAgentRuntime';
+import { getAgentIdentity, nextAgentName } from './utils/agentIdentity';
 import type { EngineeringProject } from './types/engineering';
 import { validateEngineeringProject, projectByteSize } from './utils/projectFiles';
 
@@ -93,7 +94,7 @@ function migrateLegacyCards(cards: CanvasCard[]): CanvasCard[] {
       ...card,
       legacyMigrated: true,
       title: providerIsKilo ? "Kilo Auto Free" : "OmniRoute Agent",
-      role: providerIsKilo
+      role: card.specialization ? card.role : providerIsKilo
         ? "Dynamic free model routing"
         : "OpenAI-compatible gateway",
       status: "idle",
@@ -347,6 +348,8 @@ export function App() {
         id: newId,
         type: "agent",
         agentType: aType,
+        agentName: nextAgentName(cards),
+        specialization: 'coding',
         ...(custom ? { providerId: custom.id, providerName: custom.name } : {}),
         x,
         y,
@@ -525,7 +528,7 @@ export function App() {
       if (isSimulated) {
         await new Promise(resolve => window.setTimeout(resolve, 450));
         if (!active()) return;
-        const result = generateSimulationResponse(card.agentType || 'omniroute', prompt, card.title);
+        const result = generateSimulationResponse(card.agentType || 'omniroute', prompt, getAgentIdentity(card).name);
         for (const line of result.lines) append(line.text, line.type);
         complete({ status: 'idle', lastAction: 'Demo response · no gateway contacted' });
         return;
@@ -540,7 +543,7 @@ export function App() {
         catch { project = projectForCanvas(cardId); }
       }
       const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-16).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 9000)}`).join('\n');
-      const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal,
+      const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal, agentIdentity: card,
         context: `Conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${memory.map(item => `${item.key}: ${item.value}`).join('\n')}`,
         send: request => card.agentType === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress, routing: request.routing, validateResponse: request.validateResponse }),
         syncFiles: async (files, runSignal) => {
@@ -609,13 +612,16 @@ export function App() {
       id: workerId,
       type: "agent",
       agentType: "kilo",
+      agentName: nextAgentName(cards, 'Worker'),
+      specialization: getAgentIdentity(parentCard).specialization,
+      agentInstructions: parentCard.agentInstructions || '',
       parentId: parentCardId,
       x: workerX,
       y: workerY,
       width: 500,
       height: 500,
       title: "Kilo Auto Free",
-      role: "kilo-auto/free Sub-Worker",
+      role: getAgentIdentity(parentCard).role,
       status: "idle",
       tokensUsed: 0,
       cpuPercent: 0,
@@ -634,7 +640,7 @@ export function App() {
         },
         {
           id: `sw-2-${Date.now()}`,
-          text: `Worker connected to ${parentCard.title.split("·")[0]}. Send it a task when ready.`,
+          text: `Worker connected to ${getAgentIdentity(parentCard).name}. Send it a task when ready.`,
           type: "system",
           timestamp: new Date().toLocaleTimeString([], {
             hour12: false,

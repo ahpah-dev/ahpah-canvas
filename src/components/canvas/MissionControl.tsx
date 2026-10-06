@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { CanvasCard } from "../../types/canvas";
 import { cardName, isBusy, statusName } from "../../utils/cardPresentation";
+import { getAgentIdentity } from '../../utils/agentIdentity';
 interface MissionControlProps {
   saveError: boolean;
   cards: CanvasCard[];
@@ -40,13 +41,15 @@ export function MissionControl({
   selectedCardId,
 }: MissionControlProps) {
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<'all' | 'agents' | 'tools' | 'review'>('all');
   const agents = cards.filter((card) => card.type === "agent");
-  const filtered = cards.filter((card) =>
-    cardName(card).toLowerCase().includes(search.toLowerCase()),
-  );
+  const matchesSearch = cards.filter((card) => `${cardName(card)} ${card.title} ${card.type === 'agent' ? getAgentIdentity(card).role : ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const filtered = matchesSearch.filter(card => filter === 'all' || (filter === 'agents' && card.type === 'agent') || (filter === 'tools' && card.type !== 'agent') || (filter === 'review' && (card.status === 'error' || card.status === 'approval_required')));
+  const needsReview = cards.filter(card => card.status === 'error' || card.status === 'approval_required').length;
   const active = agents.filter(isBusy).length;
   const tokens = agents.reduce((sum, card) => sum + card.tokensUsed, 0);
-  return (
+  return (<>
+    {isOpen && <button className="cw-sidebar-dismiss" aria-label="Close workspace navigation" onClick={onToggle} />}
     <aside
       className={`cw-sidebar ${isOpen ? "open" : "collapsed"}`}
       aria-label="Mission Control"
@@ -66,6 +69,7 @@ export function MissionControl({
             isOpen ? "Collapse Mission Control" : "Expand Mission Control"
           }
           onClick={onToggle}
+          aria-expanded={isOpen}
         >
           {isOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={17} />}
         </button>
@@ -74,7 +78,7 @@ export function MissionControl({
         <>
           <div className="cw-sidebar-stats">
             <div>
-              <span>RESPONDING</span>
+              <span>AGENTS WORKING</span>
               <strong>
                 {active}
                 <small> / {agents.length}</small>
@@ -93,12 +97,15 @@ export function MissionControl({
               placeholder="Find a card…"
               aria-label="Find a canvas card"
             />
-            <kbd>⌕</kbd>
+            {search && <button aria-label="Clear card search" onClick={() => setSearch('')}><span aria-hidden="true">×</span></button>}
           </label>
+          <div className="cw-sidebar-filters" role="group" aria-label="Filter canvas cards">
+            {([{ id: 'all', label: 'All' }, { id: 'agents', label: 'Agents' }, { id: 'tools', label: 'Tools' }, { id: 'review', label: `Review${needsReview ? ` ${needsReview}` : ''}` }] as const).map(item => <button key={item.id} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{item.label}</button>)}
+          </div>
           <div className="cw-sidebar-list">
-            <div className="cw-sidebar-section-title">
-              AGENTS <span>{agents.length}</span>
-            </div>
+            {filter !== 'tools' && <div className="cw-sidebar-section-title">
+              AGENTS <span>{filtered.filter(card => card.type === 'agent').length}</span>
+            </div>}
             {filtered
               .filter((card) => card.type === "agent")
               .map((card) => {
@@ -109,6 +116,7 @@ export function MissionControl({
                     key={card.id}
                     onClick={() => onFocusCard(card.id)}
                     aria-label={`Focus ${cardName(card)}`}
+                    aria-current={selectedCardId === card.id ? 'true' : undefined}
                   >
                     <span
                       className={`cw-icon-tile ${card.agentType === "kilo" ? "cyan" : ""}`}
@@ -117,7 +125,7 @@ export function MissionControl({
                     </span>
                     <div>
                       <strong>{cardName(card)}</strong>
-                      <small>{statusName(card)}</small>
+                      <small>{getAgentIdentity(card).role} · {statusName(card)}</small>
                     </div>
                     <span
                       className={`cw-session-dot ${isBusy(card) ? "active" : ""} ${card.status === "error" ? "error" : ""}`}
@@ -126,9 +134,9 @@ export function MissionControl({
                   </button>
                 );
               })}
-            <div className="cw-sidebar-section-title">
-              TOOLS & NOTES <span>{cards.length - agents.length}</span>
-            </div>
+            {(filter === 'all' || filter === 'tools') && <div className="cw-sidebar-section-title">
+              TOOLS & NOTES <span>{filtered.filter(card => card.type !== 'agent').length}</span>
+            </div>}
             {filtered
               .filter((card) => card.type !== "agent")
               .map((card) => {
@@ -143,6 +151,7 @@ export function MissionControl({
                     className={`cw-session tool ${selectedCardId === card.id ? "selected" : ""}`}
                     key={card.id}
                     onClick={() => onFocusCard(card.id)}
+                    aria-current={selectedCardId === card.id ? 'true' : undefined}
                   >
                     <Icon size={14} />
                     <div>
@@ -160,10 +169,11 @@ export function MissionControl({
                 );
               })}
             {!filtered.length && (
-              <div className="cw-sidebar-empty">
-                {search
-                  ? "No cards match your search."
-                  : "Your workspace is ready for its first card."}
+              <div className="cw-sidebar-empty" role="status">
+                <Search size={20} aria-hidden="true" />
+                <strong>{search ? 'No matching cards' : filter === 'review' ? 'Everything is clear' : 'Room for your next idea'}</strong>
+                <p>{search ? 'Try a different name or show all cards.' : filter === 'review' ? 'Cards awaiting approval or needing attention appear here.' : 'Add a card from the canvas to begin.'}</p>
+                {(search || filter !== 'all') && <button onClick={() => { setSearch(''); setFilter('all'); }}>Show all cards</button>}
               </div>
             )}
           </div>
@@ -206,6 +216,6 @@ export function MissionControl({
           </button>
         </div>
       )}
-    </aside>
+    </aside></>
   );
 }

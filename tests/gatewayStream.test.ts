@@ -108,6 +108,16 @@ test("deadline during body reading preserves TimeoutError and partial text", asy
   assert.equal(partial, "Partial");
 });
 
+test("Stop inside progress wins over DONE in the same response chunk and retains partial text", async () => {
+  const controller = new AbortController();
+  let partial = "";
+  await assert.rejects(readGatewayStream(response(event(chunk("Keep this", "stop")) + "data: [DONE]\n\n"), controller.signal, (value) => {
+    partial = value.text;
+    if (value.text && !controller.signal.aborted) controller.abort();
+  }), { name: "AbortError" });
+  assert.equal(partial, "Keep this");
+});
+
 test("Kilo requests streaming, preserves JSON compatibility, and has a three-minute deadline", async (t) => {
   const deadlines: number[] = [];
   t.mock.method(AbortSignal, "timeout", (ms: number) => { deadlines.push(ms); return new AbortController().signal; });

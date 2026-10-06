@@ -109,6 +109,9 @@ export async function readGatewayStream(
       signal.throwIfAborted();
       buffer += decoder.decode(part.value, { stream: !part.done });
       consume(part.done);
+      // Progress callbacks can request Stop while this chunk also contains DONE.
+      // Honour cancellation before returning or accepting any completed actions.
+      signal.throwIfAborted();
       if (part.done) break;
     }
     if (!done && !finishReason)

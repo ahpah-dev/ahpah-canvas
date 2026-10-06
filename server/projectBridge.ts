@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
 import { constants } from "node:fs";
 import { access, lstat, mkdir, open, readdir, readFile, realpath, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -280,14 +281,17 @@ async function execute(folder: string, command: ReturnType<typeof parseProjectCo
     if ((await lstat(directory)).isSymbolicLink() || await realpath(directory) !== directory) throw new ProjectError(400, "Internal project folders cannot be filesystem links.");
   }
   Object.assign(environment, { HOME: home, USERPROFILE: home, TMPDIR: temporary, TEMP: temporary, TMP: temporary, npm_config_cache: join(folder, ".ahpah-cache"), npm_config_userconfig: join(home, ".npmrc"), npm_config_audit: "false", npm_config_fund: "false", FORCE_COLOR: "0", CI: "1" });
+  // Preparation performs filesystem work; Stop may arrive during those awaits.
+  if (signal.aborted) throw new ProjectError(499, "Project execution was cancelled.");
   const child = spawn(process.execPath, command.kind === "npm" ? [npm!, ...command.args] : command.args, {
     cwd: folder, env: environment, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "", stderr = "", bytes = 0, truncated = false, timedOut = false;
+  const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
   const append = (chunk: Buffer, stream: "stdout" | "stderr") => {
     const remaining = Math.max(0, OUTPUT_BYTES - bytes);
     if (chunk.length > remaining) truncated = true;
-    const text = chunk.subarray(0, remaining).toString("utf8");
+    const text = decoders[stream].write(chunk.subarray(0, remaining));
     bytes += Math.min(chunk.length, remaining);
     if (stream === "stdout") stdout += text; else stderr += text;
   };
@@ -297,12 +301,16 @@ async function execute(folder: string, command: ReturnType<typeof parseProjectCo
   const terminate = () => { terminating ??= terminateTree(child); };
   const timer = setTimeout(() => { timedOut = true; terminate(); }, timeoutMs);
   signal.addEventListener("abort", terminate, { once: true });
+  if (signal.aborted) terminate();
   try {
     const exitCode = await new Promise<number | null>((finish, reject) => {
       child.once("error", reject);
       child.once("close", (code) => finish(code));
     });
     if (terminating) await terminating;
+    // When bounded output cuts a UTF-8 sequence, omit that unfinished character.
+    // Normal closes still flush genuinely incomplete/invalid process output.
+    if (!truncated) { stdout += decoders.stdout.end(); stderr += decoders.stderr.end(); }
     return { stdout, stderr, exitCode, timedOut, truncated, cancelled: signal.aborted };
   } finally { clearTimeout(timer); signal.removeEventListener("abort", terminate); }
 }

@@ -5,6 +5,8 @@ import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, writeFile, link, symlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { createProjectMiddleware, normalizeProjectPath, parseProjectCommand } from "../server/projectBridge.ts";
 
 async function fixture(t: { after: (callback: () => Promise<void>) => void }, timeoutMs = 5_000, binding = true) {
@@ -22,7 +24,7 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }, ti
   const run = (body: unknown, extra: RequestInit = {}) => fetch(`${origin}/api/project/run`, {
     method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body), ...extra,
   });
-  return { workspace, origin, run };
+  return { workspace, origin, run, server };
 }
 
 const main = (content: string) => [{ path: "main.mjs", content }];
@@ -126,6 +128,61 @@ test("aborting the browser request kills its command and releases the project lo
   await assert.rejects(readFile(join(workspace, ".ahpah-projects/cancel-fixture/escaped.txt")), { code: "ENOENT" });
   const next = await run({ projectId: "cancel-fixture", command: "node main.mjs", files: main("console.log('next')") });
   assert.equal(next.status, 200);
+});
+
+test("command output preserves UTF-8 characters split across stdout and stderr chunks", async (t) => {
+  const { run } = await fixture(t);
+  const result = await (await run({ command: "node main.mjs", files: main("const text=Buffer.from('Ready 🌙 café'); for (const byte of text) { process.stdout.write(Buffer.from([byte])); process.stderr.write(Buffer.from([byte])); await new Promise(resolve=>setTimeout(resolve,10)); }") })).json();
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stdout, "Ready 🌙 café");
+  assert.equal(result.stderr, "Ready 🌙 café");
+});
+
+test("Stop during command preparation prevents process launch and releases the project lock", async (t) => {
+  const { workspace, run, server } = await fixture(t);
+  const controller = new AbortController();
+  let prepared!: () => void, resume!: () => void, disconnected!: () => void;
+  const preparing = new Promise<void>((finish) => { prepared = finish; });
+  const paused = new Promise<void>((finish) => { resume = finish; });
+  const closed = new Promise<void>((finish) => { disconnected = finish; });
+  const originalMkdir = fsPromises.mkdir;
+  const mock = t.mock.method(fsPromises, "mkdir", async (...args: Parameters<typeof fsPromises.mkdir>) => {
+    if (String(args[0]) === join(workspace, ".ahpah-projects/preparation-fixture/.ahpah-temp")) {
+      prepared(); await paused;
+    }
+    return originalMkdir(...args);
+  });
+  syncBuiltinESMExports();
+  const restore = () => { resume(); mock.mock.restore(); syncBuiltinESMExports(); };
+  t.after(restore);
+  server.once("request", (_request, response) => { response.once("close", disconnected); });
+  const pending = run({ projectId: "preparation-fixture", command: "node main.mjs", files: main("import {writeFileSync} from 'node:fs'; writeFileSync('should-not-run.txt','ran');") }, { signal: controller.signal });
+  await preparing;
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  await closed;
+  restore();
+  let next!: Response;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    next = await run({ projectId: "preparation-fixture", command: "node main.mjs", files: main("console.log('resumed')") });
+    if (next.status !== 409) break;
+    await next.arrayBuffer();
+    await new Promise((finish) => setTimeout(finish, 10));
+  }
+  assert.equal(next.status, 200);
+  const result = await next.json();
+  assert.match(result.stdout, /resumed/);
+  assert.ok(!result.files.some((file: { path: string }) => file.path === "should-not-run.txt"));
+  await assert.rejects(readFile(join(workspace, ".ahpah-projects/preparation-fixture/should-not-run.txt")), { code: "ENOENT" });
+});
+
+test("bounded command output omits a character split by the byte limit", async (t) => {
+  const { run } = await fixture(t);
+  const result = await (await run({ command: "node main.mjs", files: main("process.stdout.write('x'.repeat(255998)+'🌙');") })).json();
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.truncated, true);
+  assert.equal(result.stdout, "x".repeat(255998));
+  assert.ok(Buffer.byteLength(result.stdout) <= 256_000);
 });
 
 test("linked files and project folders cannot overwrite files outside the project", async (t) => {

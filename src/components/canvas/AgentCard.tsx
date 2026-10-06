@@ -18,6 +18,7 @@ import {
   FileCode2,
   Settings2,
   FolderOpen,
+  Pencil,
 } from "lucide-react";
 import type { CanvasCard, TerminalLine } from "../../types/canvas";
 import { loadGatewayConfig, supportsLocalBridge } from "../../utils/gateways";
@@ -28,6 +29,8 @@ import { isNearScrollBottom } from "../../utils/interactionScheduling";
 import { completeHtml, htmlFilename, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
 import { saveHtmlToFolder } from '../../utils/connectedFolder';
 import { loadCanvasProject } from '../../utils/canvasAgentRuntime';
+import { getAgentIdentity } from '../../utils/agentIdentity';
+import { AgentIdentityEditor } from './AgentIdentityEditor';
 
 interface AgentCardProps {
   card: CanvasCard;
@@ -146,6 +149,7 @@ function AgentCardBody({
   const [copyError, setCopyError] = useState("");
   const [showQuick, setShowQuick] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [editingIdentity, setEditingIdentity] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const followingOutput = useRef(true);
   const oldSize = useRef<{ width: number; height: number } | null>(null);
@@ -171,7 +175,8 @@ function AgentCardBody({
   // oxlint-disable-next-line react-hooks/exhaustive-deps
   const config = useMemo(() => loadGatewayConfig(), [providerConfigRevision]);
   const custom = card.agentType === "custom" ? config.customProviders?.find((provider) => provider.id === card.providerId) : undefined;
-  const name = custom?.name || cardName(card);
+  const name = card.agentName?.trim() || custom?.name || cardName(card);
+  const identity = getAgentIdentity(card);
   const providerName = custom?.name || (card.agentType === "codex" ? "Codex · ChatGPT" : card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
   const configuredModel = card.agentType === "codex" ? codexModel() : card.agentType === "custom" ? custom?.model || "" : kilo ? config.kiloModel : config.omniRouteModel;
   const model = configuredModel;
@@ -254,7 +259,8 @@ function AgentCardBody({
           </h2>
           <p>
             {providerName} <span>·</span>{" "}
-            {isSimulated ? "Demo simulation" : "Live requests"}
+            <span className="cw-agent-role" title={identity.role}>{identity.role}</span>
+            {isSimulated && <> <span>·</span> Demo simulation</>}
           </p>
         </div>
         <span
@@ -273,6 +279,7 @@ function AgentCardBody({
           className="cw-header-actions"
           onClick={(event) => event.stopPropagation()}
         >
+          <button className="cw-agent-identity-trigger" aria-label={`Edit ${name} identity`} title={busy ? 'Stop the current task to edit this agent' : 'Rename agent and edit specialization'} onClick={() => setEditingIdentity(true)} disabled={busy}><Pencil size={13} /></button>
           <button
             aria-label={`Copy ${name} conversation`}
             title="Copy conversation"
@@ -296,6 +303,7 @@ function AgentCardBody({
           </button>
         </div>
       </header>
+      {editingIdentity && <AgentIdentityEditor card={card} onSave={onUpdate} onClose={() => setEditingIdentity(false)} />}
       <div className="cw-model-row">
         <span className="cw-model-label">MODEL</span>
         <button onClick={onOpenSettings} title={model || "Choose a model"}>
