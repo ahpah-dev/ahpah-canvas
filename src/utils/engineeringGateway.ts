@@ -1,6 +1,8 @@
 import type { AgentSender, EngineeringProvider } from "../types/engineering.ts";
 import { loadGatewayConfig, sendGatewayPrompt, supportsLocalBridge, type GatewayConfig } from "./gateways.ts";
 import { codexModel, sendCodexPrompt } from "./codexConnection.ts";
+import { isLocalOllamaUrl } from './gatewayPolicy.ts';
+import { normalizeProviderUrl } from './providerConfig.ts';
 
 /** Coding uses the user's current provider configuration and the same live routes as canvas cards. */
 export function engineeringProviders(config: GatewayConfig): EngineeringProvider[] {
@@ -11,8 +13,11 @@ export function engineeringProviders(config: GatewayConfig): EngineeringProvider
   if (config.omniRouteModel.trim())
     providers.push({ id: "omniroute", label: "OmniRoute", model: config.omniRouteModel });
   for (const provider of config.customProviders || []) {
-    if (provider.model.trim())
-      providers.push({ id: `custom:${provider.id}`, label: provider.name, model: provider.model });
+    if (provider.model.trim()) {
+      let localModel = false;
+      try { localModel = isLocalOllamaUrl(normalizeProviderUrl(provider.baseUrl)); } catch { /* Invalid URLs are reported when connecting, without breaking the picker. */ }
+      providers.push({ id: `custom:${provider.id}`, label: provider.name, model: provider.model, ...(localModel ? { localModel } : {}) });
+    }
   }
   return providers;
 }

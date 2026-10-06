@@ -29,7 +29,7 @@ export interface EngineeringChangeSet {
   tokens: number;
 }
 
-export interface EngineeringProvider { id: string; label: string; model: string }
+export interface EngineeringProvider { id: string; label: string; model: string; localModel?: boolean }
 export interface AgentMessage { role: 'system' | 'user' | 'assistant'; content: string }
 export interface AgentProgress { text: string; model?: string; phase?: string; detail?: string }
 export interface AgentRoutingState {
@@ -50,7 +50,7 @@ export type AgentSender = (request: {
   onProgress?: (progress: AgentProgress) => void;
   routing?: AgentRoutingState;
   validateResponse?: (text: string) => void;
-}) => Promise<{ text: string; model: string; tokens: number }>;
+}) => Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean }>;
 
 export type AgentPhase = 'planning' | 'implementing' | 'reviewing' | 'ready' | 'error' | 'stopped';
 export interface AgentActivity {

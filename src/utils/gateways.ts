@@ -4,7 +4,9 @@ import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
 import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
 import { normalizeCustomProviders, normalizeOmniRouteUrl, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
-import { omniCodingTools, omniToolActions } from './omniRouteTools.ts';
+import { omniCodingTools, omniToolActions, completeOmniToolPrefix } from './omniRouteTools.ts';
+import { completeActionPrefix } from './codingResponse.ts';
+import { LOCAL_CODING_OUTPUT_TOKENS } from './localCoding.ts';
 import { freeModelCandidates, omniGatewayAuthFailure, omniModelProvider, omniRouteErrorMessage, unavailableOmniProvider } from './omniRoutePolicy.ts';
 import type { AgentRoutingState } from '../types/engineering.ts';
 export type { CustomProvider, GatewayTransport } from "./providerConfig.ts";
@@ -278,7 +280,7 @@ export async function sendGatewayPrompt(
     routing?: AgentRoutingState;
     validateResponse?: (text: string) => void;
   } = {},
-): Promise<{ text: string; model: string; tokens: number }> {
+): Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean }> {
   const isKilo = provider === "kilo";
   const custom = provider === "custom" ? config.customProviders?.find((item) => item.id === options.providerId) : undefined;
   if (provider === "custom" && !custom) throw new Error("This custom provider is no longer configured. Add it in Settings or create a card for another provider.");
@@ -299,7 +301,7 @@ export async function sendGatewayPrompt(
   // Accept native replies without requiring installed text-only Ollama models
   // to support advertised tools. Both formats use the same validated runtime.
   const advertiseNativeTools = nativeCoding && !localOllama;
-  const maxTokens = options.maxTokens ?? (isKilo ? 8192 : 2048);
+  const maxTokens = localOllama && nativeCoding ? Math.min(options.maxTokens ?? LOCAL_CODING_OUTPUT_TOKENS, LOCAL_CODING_OUTPUT_TOKENS) : options.maxTokens ?? (isKilo ? 8192 : 2048);
   const omniAutomatic = provider === 'omniroute' && isAutomaticModel({ id: model }) && isFreeModel({ id: model });
   let automatic = (isKilo && model === "kilo-auto/free") || omniAutomatic;
   if (options.routing) options.routing.automatic = automatic;
@@ -453,8 +455,16 @@ export async function sendGatewayPrompt(
         typeof message.content !== "string" && !Array.isArray(message.content)
       )
         throw new Error(`${resolvedModel} returned an invalid completion format.`);
-      if (nativeCoding && choice?.finish_reason === 'length')
-        throw new EmptyCompletionError(`${resolvedModel} reached the ${maxTokens.toLocaleString()} token limit before completing its coding response. Any partial source has been kept; no truncated actions were executed.`, resolvedModel, 'token_limit');
+      if (nativeCoding && choice?.finish_reason === 'length') {
+        if (localOllama && options.validateResponse) {
+          const prefix = completeOmniToolPrefix(message.tool_calls) ?? completeActionPrefix(answerText(message.content), options.validateResponse);
+          if (prefix) options.validateResponse(prefix);
+          // Only the runtime can decide whether to continue within its request budget.
+          // A length finish can mean context exhaustion, not max_tokens output.
+          return { text: prefix, model: resolvedModel, tokens, outputTruncated: true };
+        }
+        throw new EmptyCompletionError(`${resolvedModel} reached its context limit or configured ${maxTokens.toLocaleString()} token limit before completing its coding response. Any staged source has been kept; no truncated actions were executed.`, resolvedModel, 'token_limit');
+      }
       let nativeActions: string | undefined;
       if (nativeCoding) {
         try { nativeActions = omniToolActions(message.tool_calls); }
@@ -494,7 +504,7 @@ export async function sendGatewayPrompt(
 
       if (choice?.finish_reason === "length")
         throw new EmptyCompletionError(
-          `${resolvedModel} reached the ${maxTokens.toLocaleString("en-US")} token limit before producing an answer. Try a shorter prompt or choose a model with less reasoning.`,
+          `${resolvedModel} reached its context limit or configured ${maxTokens.toLocaleString("en-US")} token limit before producing an answer. Try a shorter prompt or choose a model with less reasoning.`,
           resolvedModel,
           'token_limit',
         );

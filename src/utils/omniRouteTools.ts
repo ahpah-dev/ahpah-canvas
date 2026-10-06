@@ -27,6 +27,7 @@ export function omniToolActions(calls: unknown): string | undefined {
     // Also accept the canonical names documented in the coding instructions.
     read_file: 'read_file', list_files: 'list_files', search_files: 'search_files',
     replace_in_file: 'replace_in_file', write_file: 'write_file', delete_file: 'delete_file',
+    append_to_file: 'append_to_file',
     run_command: 'run_command', save_files: 'save_files',
     plan: 'plan', finish: 'finish', export_html: 'export_html',
   };
@@ -41,4 +42,20 @@ export function omniToolActions(calls: unknown): string | undefined {
   });
   // A native function call is an action proposal, never permission to bypass the agent.
   return JSON.stringify({ actions: parseAgentActions(JSON.stringify({ actions })) });
+}
+
+/** A length cutoff may leave a complete call followed by incomplete arguments. */
+export function completeOmniToolPrefix(calls: unknown): string | undefined {
+  if (!Array.isArray(calls) || !calls.length) return undefined;
+  const actions = [];
+  for (const call of calls.slice(0, 8)) {
+    try {
+      const text = omniToolActions([call]);
+      if (!text) break;
+      const [action] = parseAgentActions(text);
+      if (action.tool === 'finish') break;
+      actions.push(action);
+    } catch { break; }
+  }
+  return actions.length ? JSON.stringify({ actions }) : '';
 }

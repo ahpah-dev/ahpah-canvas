@@ -566,6 +566,7 @@ export function App() {
       await saveCanvasRunCheckpoint(checkpoint);
       if (!active()) return;
       const result = await runCanvasAgent({ cardId, project: baseProject, initialWorkingProject: checkpoint.workingProject, goal: prompt, providerId, signal: controller.signal, agentIdentity: checkpoint.agentIdentity,
+        localModel: engineeringProviders(gatewayConfig).find(item => item.id === providerId)?.localModel,
         requestsUsed: checkpoint.requestsUsed,
         onRequestCheckpoint: requestsUsed => {
           checkpoint = { ...checkpoint, requestsUsed };

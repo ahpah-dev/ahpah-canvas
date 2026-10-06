@@ -4,6 +4,7 @@ import { AGENT_SPECIALIZATIONS, normalizeAgentIdentity } from './agentIdentity.t
 import { validateEngineeringProject } from './projectFiles.ts';
 import type { AgentType } from '../types/canvas.ts';
 import { AGENT_MAX_REQUESTS } from './agentRuntime.ts';
+import { LOCAL_CODING_MAX_REQUESTS } from './localCoding.ts';
 
 const DATABASE = 'ahpah-canvas-runs';
 const STORE = 'active-runs';
@@ -47,7 +48,7 @@ function safeCheckpoint(value: unknown): CanvasRunCheckpoint | null {
     typeof candidate.inputTimestamp !== 'string' || candidate.inputTimestamp.length > 64 ||
     typeof candidate.providerId !== 'string' || !/^(?:kilo|omniroute|codex|custom:[\w-]{1,100})$/.test(candidate.providerId) ||
     typeof candidate.context !== 'string' || candidate.context.length > 64_000 ||
-    (candidate.requestsUsed !== undefined && (typeof candidate.requestsUsed !== 'number' || !Number.isInteger(candidate.requestsUsed) || candidate.requestsUsed < 0 || candidate.requestsUsed > AGENT_MAX_REQUESTS)) ||
+    (candidate.requestsUsed !== undefined && (typeof candidate.requestsUsed !== 'number' || !Number.isInteger(candidate.requestsUsed) || candidate.requestsUsed < 0 || candidate.requestsUsed > (candidate.providerId.startsWith('custom:') ? LOCAL_CODING_MAX_REQUESTS : AGENT_MAX_REQUESTS))) ||
     typeof candidate.startedAt !== 'number' || !Number.isFinite(candidate.startedAt) || Date.now() - candidate.startedAt > MAX_AGE_MS ||
     !candidate.agentIdentity || typeof candidate.agentIdentity !== 'object') return null;
   try {

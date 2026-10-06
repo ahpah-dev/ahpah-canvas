@@ -2,6 +2,7 @@ import type { AgentFileSyncResult, AgentRunEvent, AgentRunResult, AgentSender, E
 import { runEngineeringAgent, ENGINEERING_AGENT_INSTRUCTIONS } from './agentRuntime.ts';
 import { applyProjectChanges, validateEngineeringProject, validateProjectFiles } from './projectFiles.ts';
 import { agentIdentityInstructions, type AgentIdentityInput } from './agentIdentity.ts';
+import { LOCAL_CODING_INSTRUCTIONS, LOCAL_CANVAS_INSTRUCTIONS } from './localCoding.ts';
 
 const CANVAS_PROJECT_PREFIX = 'ahpah_canvas_project_v1:';
 const latestRuns = new Map<string, symbol>();
@@ -72,6 +73,7 @@ export async function runCanvasAgent(options: {
   initialWorkingProject?: EngineeringProject;
   goal: string;
   providerId: string;
+  localModel?: boolean;
   send: AgentSender;
   signal: AbortSignal;
   context?: string;
@@ -103,7 +105,7 @@ export async function runCanvasAgent(options: {
   let result: AgentRunResult;
   try {
     result = await runEngineeringAgent({
-      ...options, signal, project: original, initialWorkingProject, mode: 'canvas', instructions: CANVAS_AGENT_INSTRUCTIONS + (options.agentIdentity ? agentIdentityInstructions(options.agentIdentity) : ''),
+      ...options, signal, project: original, initialWorkingProject, mode: 'canvas', instructions: (options.localModel ? LOCAL_CODING_INSTRUCTIONS + LOCAL_CANVAS_INSTRUCTIONS : CANVAS_AGENT_INSTRUCTIONS) + (options.agentIdentity ? agentIdentityInstructions(options.agentIdentity) : ''),
       context: undefined, conversationContext: options.context,
       onProjectCheckpoint: async files => {
         assertCurrent(signal);
