@@ -51,7 +51,7 @@ test("Auto Free recovers from reasoning exhaustion using a current verified free
   assert.ok(signals.every((signal) => !signal.aborted));
 });
 
-test("empty Auto Free responses try at most three distinct verified routes", async (t) => {
+test("empty Auto Free responses try at most two distinct verified routes", async (t) => {
   let calls = 0;
   t.mock.method(globalThis, "fetch", async (url: unknown) => {
     if (String(url).endsWith("/models")) return catalog();
@@ -59,7 +59,28 @@ test("empty Auto Free responses try at most three distinct verified routes", asy
     return json(completion("", "length"));
   });
   await assert.rejects(sendGatewayPrompt("kilo", "Hello", config), /8,192 token limit/);
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
+});
+
+test("the per-run request budget persists across turns and is saved before provider calls", async (t) => {
+  const providerModels: string[] = [];
+  const checkpoints: number[] = [];
+  const routing = {
+    excludedModels: [],
+    requestLimit: 2,
+    requestsUsed: 1,
+    beforeRequest: async (used: number) => { checkpoints.push(used); },
+  };
+  t.mock.method(globalThis, "fetch", async (url: unknown, init: RequestInit) => {
+    if (String(url).endsWith("/models")) return catalog();
+    providerModels.push(JSON.parse(init.body as string).model);
+    return json(completion("Ready"));
+  });
+  await sendGatewayPrompt("kilo", "Continue", config, { routing });
+  assert.equal(routing.requestsUsed, 2);
+  await assert.rejects(sendGatewayPrompt("kilo", "One more step", config, { routing }), /2-request limit/);
+  assert.equal(providerModels.length, 1);
+  assert.deepEqual(checkpoints, [2]);
 });
 
 test("Auto Free probes preserve their token ceiling and cannot leak reasoning as an answer", async (t) => {
@@ -72,7 +93,7 @@ test("Auto Free probes preserve their token ceiling and cannot leak reasoning as
     });
   });
   await assert.rejects(sendGatewayPrompt("kilo", "READY", config, { maxTokens: 16 }), /16 token limit/);
-  assert.deepEqual(budgets, [16, 16, 16]);
+  assert.deepEqual(budgets, [16, 16]);
 });
 
 test("paid and manually selected routes are not retried or replaced", async (t) => {

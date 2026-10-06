@@ -69,12 +69,16 @@ export interface CanvasAgentResult extends AgentRunResult {
 export async function runCanvasAgent(options: {
   cardId: string;
   project?: EngineeringProject;
+  initialWorkingProject?: EngineeringProject;
   goal: string;
   providerId: string;
   send: AgentSender;
   signal: AbortSignal;
   context?: string;
   agentIdentity?: AgentIdentityInput;
+  onProjectCheckpoint?: (project: EngineeringProject) => Promise<void> | void;
+  requestsUsed?: number;
+  onRequestCheckpoint?: (requestsUsed: number) => Promise<void> | void;
   onEvent?: (event: AgentRunEvent) => void;
   syncFiles?: (files: EngineeringFile[], signal: AbortSignal) => Promise<AgentFileSyncResult>;
   exportHtml?: Parameters<typeof runEngineeringAgent>[0]['exportHtml'];
@@ -82,6 +86,8 @@ export async function runCanvasAgent(options: {
   timeoutMs?: number;
 }): Promise<CanvasAgentResult> {
   const original = validateEngineeringProject(options.project ?? projectForCanvas(options.cardId));
+  const initialWorkingProject = validateEngineeringProject(options.initialWorkingProject ?? original);
+  if (initialWorkingProject.id !== original.id) throw new Error('The saved agent checkpoint belongs to a different project.');
   const runId = Symbol(options.cardId);
   activeRuns.get(options.cardId)?.controller.abort(new DOMException('A newer Canvas run replaced this run.', 'AbortError'));
   const controller = new AbortController();
@@ -93,11 +99,19 @@ export async function runCanvasAgent(options: {
     if (latestRuns.get(options.cardId) !== runId) throw new DOMException('Newer Canvas source replaced this run. Its files cannot be saved.', 'AbortError');
   };
   let folderSave: AgentFileSyncResult | undefined;
+  let checkpointRevision = Math.max(original.revision, initialWorkingProject.revision);
   let result: AgentRunResult;
   try {
     result = await runEngineeringAgent({
-      ...options, signal, project: original, mode: 'canvas', instructions: CANVAS_AGENT_INSTRUCTIONS + (options.agentIdentity ? agentIdentityInstructions(options.agentIdentity) : ''),
+      ...options, signal, project: original, initialWorkingProject, mode: 'canvas', instructions: CANVAS_AGENT_INSTRUCTIONS + (options.agentIdentity ? agentIdentityInstructions(options.agentIdentity) : ''),
       context: undefined, conversationContext: options.context,
+      onProjectCheckpoint: async files => {
+        assertCurrent(signal);
+        const checkpointProject = validateEngineeringProject({ ...original, files: validateProjectFiles(files), revision: ++checkpointRevision, updatedAt: new Date().toISOString() });
+        persistCanvasProject(options.cardId, checkpointProject);
+        await options.onProjectCheckpoint?.(checkpointProject);
+        assertCurrent(signal);
+      },
       syncFiles: options.syncFiles ? async (files, operationSignal) => {
         assertCurrent(operationSignal);
         const outcome = await options.syncFiles!(files, operationSignal);

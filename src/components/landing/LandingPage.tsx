@@ -105,67 +105,6 @@ function CodeLine({ text }: { text: string }) {
   );
 }
 
-function PointerLight({ page }: { page: React.RefObject<HTMLDivElement | null> }) {
-  const light = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const surface = page.current;
-    const layer = light.current;
-    if (!surface || !layer) return;
-    const pointer = window.matchMedia('(hover: hover) and (pointer: fine)');
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let enabled = false;
-    let visible = false;
-    let frame = 0;
-    let x = 0, y = 0, targetX = 0, targetY = 0;
-    const hide = () => {
-      visible = false;
-      layer.dataset.active = 'false';
-      window.cancelAnimationFrame(frame);
-      frame = 0;
-    };
-    const updatePreferences = () => {
-      enabled = pointer.matches && !motion.matches && !['none', 'off'].includes(document.documentElement.dataset.canvasMotion || '');
-      if (!enabled) hide();
-    };
-    const draw = () => {
-      x += (targetX - x) * 0.2;
-      y += (targetY - y) * 0.2;
-      layer.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      frame = Math.abs(targetX - x) + Math.abs(targetY - y) > 0.4 ? window.requestAnimationFrame(draw) : 0;
-    };
-    const follow = (event: PointerEvent) => {
-      if (!enabled || event.pointerType === 'touch') return;
-      targetX = event.clientX;
-      targetY = event.clientY;
-      if (!visible) { x = targetX; y = targetY; visible = true; layer.dataset.active = 'true'; }
-      if (!frame) frame = window.requestAnimationFrame(draw);
-    };
-    const onVisibilityChange = () => { if (document.hidden) hide(); };
-    const preferences = new MutationObserver(updatePreferences);
-    preferences.observe(document.documentElement, { attributes: true, attributeFilter: ['data-canvas-motion'] });
-    updatePreferences();
-    surface.addEventListener('pointermove', follow, { passive: true });
-    surface.addEventListener('pointerleave', hide);
-    surface.addEventListener('pointercancel', hide);
-    pointer.addEventListener('change', updatePreferences);
-    motion.addEventListener('change', updatePreferences);
-    window.addEventListener('blur', hide);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      hide();
-      preferences.disconnect();
-      surface.removeEventListener('pointermove', follow);
-      surface.removeEventListener('pointerleave', hide);
-      surface.removeEventListener('pointercancel', hide);
-      pointer.removeEventListener('change', updatePreferences);
-      motion.removeEventListener('change', updatePreferences);
-      window.removeEventListener('blur', hide);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [page]);
-  return <div ref={light} className="lp-pointer-light" aria-hidden="true" data-active="false"><i /></div>;
-}
-
 function EngineeringShowcase({ onLaunch, workspaceDrop, onWorkspaceDropEnd }: { onLaunch: () => void; workspaceDrop: boolean; onWorkspaceDropEnd: () => void }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [lightPreview, setLightPreview] = useState(false);
@@ -260,7 +199,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
 
   return (
     <div className="lp-page" ref={pageRef}>
-      <PointerLight page={pageRef} />
       <div>
         <section className="lp-hero">
           <div className="lp-hero-grid" aria-hidden="true" /><div className="lp-hero-light" aria-hidden="true" /><div className="lp-hero-orbits" aria-hidden="true"><i /><i /><i /><span className="lp-orbit-point"><Code2 size={17} /></span><span className="lp-orbit-point cyan"><Sparkles size={15} /></span></div>

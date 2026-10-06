@@ -32,7 +32,15 @@ export interface EngineeringChangeSet {
 export interface EngineeringProvider { id: string; label: string; model: string }
 export interface AgentMessage { role: 'system' | 'user' | 'assistant'; content: string }
 export interface AgentProgress { text: string; model?: string; phase?: string; detail?: string }
-export interface AgentRoutingState { model?: string; excludedModels: string[]; automatic?: boolean; recoverable?: boolean }
+export interface AgentRoutingState {
+  model?: string;
+  excludedModels: string[];
+  automatic?: boolean;
+  recoverable?: boolean;
+  requestLimit?: number;
+  requestsUsed?: number;
+  beforeRequest?: (requestsUsed: number) => Promise<void> | void;
+}
 export type AgentSender = (request: {
   providerId: string;
   runId?: string;

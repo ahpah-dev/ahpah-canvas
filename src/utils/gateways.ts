@@ -6,6 +6,7 @@ import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRout
 import { normalizeCustomProviders, normalizeOmniRouteUrl, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
 import { omniCodingTools, omniToolActions } from './omniRouteTools.ts';
 import { freeModelCandidates, omniGatewayAuthFailure, omniModelProvider, omniRouteErrorMessage, unavailableOmniProvider } from './omniRoutePolicy.ts';
+import type { AgentRoutingState } from '../types/engineering.ts';
 export type { CustomProvider, GatewayTransport } from "./providerConfig.ts";
 
 export type GatewayModel = {
@@ -33,6 +34,21 @@ export type GatewayConfig = {
 
 const KILO_BASE = "/api/gateway/kilo";
 const KILO_UPSTREAM = "https://api.kilo.ai/api/gateway";
+const MODEL_CATALOG_CACHE_MS = 30_000;
+const modelCatalogCache = new Map<string, { expiresAt: number; fetcher: typeof fetch; models: GatewayModel[] }>();
+
+function cachedModels(key: string): GatewayModel[] | undefined {
+  const cached = modelCatalogCache.get(key);
+  if (!cached || cached.fetcher !== fetch) return undefined;
+  if (cached.expiresAt <= Date.now()) { modelCatalogCache.delete(key); return undefined; }
+  return cached.models.map(model => ({ ...model }));
+}
+
+function cacheModels(key: string, models: GatewayModel[]): GatewayModel[] {
+  modelCatalogCache.set(key, { expiresAt: Date.now() + MODEL_CATALOG_CACHE_MS, fetcher: fetch, models: models.map(model => ({ ...model })) });
+  if (modelCatalogCache.size > 8) modelCatalogCache.delete(modelCatalogCache.keys().next().value!);
+  return models;
+}
 class UnusableCodingResponseError extends Error {
   model: string;
   constructor(message: string, model: string) { super(message); this.model = model; }
@@ -190,6 +206,9 @@ export async function listOmniRouteModels(
   signal?: AbortSignal,
 ): Promise<GatewayModel[]> {
   const route = endpoint("omniroute", config);
+  const cacheKey = `omniroute:${route.base}`;
+  const cached = cachedModels(cacheKey);
+  if (cached) return cached;
   try {
     const result = await jsonRequest(
       `${route.base}/models?prefix=alias`,
@@ -200,7 +219,7 @@ export async function listOmniRouteModels(
       },
     );
     if (!Array.isArray(result.data)) throw new Error('OmniRoute did not return a model catalog. Use its API base URL ending in /v1.');
-    return sortModelCatalog(result.data.filter((model: GatewayModel | null) => model && typeof model.id === 'string' && model.id.trim()));
+    return cacheModels(cacheKey, sortModelCatalog(result.data.filter((model: GatewayModel | null) => model && typeof model.id === 'string' && model.id.trim())));
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'message', { value: redactProviderError(error.message, [config.omniRouteKey, config.kiloKey, ...(config.customProviders || []).map(provider => provider.apiKey)]), configurable: true });
     throw error;
@@ -211,17 +230,21 @@ export async function listKiloModels(
   signal?: AbortSignal,
   config?: GatewayConfig,
 ): Promise<GatewayModel[]> {
-  const result = await jsonRequest(`${endpoint("kilo", config).base}/models`, {
+  const base = endpoint("kilo", config).base;
+  const cacheKey = `kilo:${base}`;
+  const cached = cachedModels(cacheKey);
+  if (cached) return cached;
+  const result = await jsonRequest(`${base}/models`, {
     signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
     cache: "no-store",
   });
   if (!Array.isArray(result.data)) throw new Error('Kilo did not return a valid model catalog. Retry loading live models in Settings.');
-  return sortModelCatalog(
+  return cacheModels(cacheKey, sortModelCatalog(
         result.data.filter(
           (model: GatewayModel | null) =>
             model && typeof model.id === "string" && model.id.trim(),
         ),
-      );
+      ));
 }
 
 export async function listCustomModels(provider: CustomProvider, config: GatewayConfig, signal?: AbortSignal): Promise<GatewayModel[]> {
@@ -252,7 +275,7 @@ export async function sendGatewayPrompt(
     onProgress?: (progress: GatewayProgress) => void;
     firstAnswerTimeoutMs?: number;
     providerId?: string;
-    routing?: { model?: string; excludedModels: string[]; automatic?: boolean; recoverable?: boolean };
+    routing?: AgentRoutingState;
     validateResponse?: (text: string) => void;
   } = {},
 ): Promise<{ text: string; model: string; tokens: number }> {
@@ -340,9 +363,18 @@ export async function sendGatewayPrompt(
       ...(isKilo && options.runId && /^[a-zA-Z0-9_-]{1,100}$/.test(options.runId) ? { 'X-KiloCode-TaskId': options.runId } : {}),
     },
   };
-  const attempts = omniAutomatic ? 6 : automatic ? 3 : 1;
+  let attempts = automatic ? 2 : 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
     signal.throwIfAborted();
+    const used = options.routing?.requestsUsed ?? 0;
+    const limit = options.routing?.requestLimit;
+    if (limit !== undefined && used >= limit)
+      throw new Error(`This run reached its ${limit}-request limit. Staged files are kept; start a new task to continue.`);
+    if (limit !== undefined) {
+      const nextRequest = used + 1;
+      await options.routing?.beforeRequest?.(nextRequest);
+      if (options.routing) options.routing.requestsUsed = nextRequest;
+    }
     const local = new AbortController();
     const attemptSignal = AbortSignal.any([signal, local.signal]);
     const timer = automatic
@@ -505,6 +537,10 @@ export async function sendGatewayPrompt(
           if (options.routing) options.routing.excludedModels = [...new Set([...options.routing.excludedModels, target.id])];
           options.onProgress?.({ text: '', phase: 'retrying', detail: `${instant.name || instant.id} exhausted its reasoning budget. Retrying its advertised instant mode` });
           target = instant;
+          // The advertised instant variant is a distinct, bounded recovery. Allow one
+          // further fallback only if that variant also fails; the run-wide request
+          // budget still caps the total number of paid/free provider calls.
+          attempts = Math.max(attempts, attempt + 3);
           continue;
         }
       }

@@ -1,7 +1,5 @@
 /* Landing page visual system, independent of the canvas controls. */
 .lp-page {
-  position:relative;
-  isolation:isolate;
   color:#f4f3ff;
   background:#08090f;
   overflow:clip;
@@ -10,41 +8,6 @@
   --lp-ease:cubic-bezier(.22,1,.36,1);
   --lp-motion-duration:260ms
 }
-
-/* One cached gradient moves on the compositor; no per-frame layout or blur. */
-.lp-pointer-light {
-  position:fixed;
-  top:0;
-  left:0;
-  width:0;
-  height:0;
-  z-index:0;
-  pointer-events:none;
-  opacity:0;
-  transition:opacity 420ms ease;
-  will-change:transform;
-}
-.lp-pointer-light[data-active="true"] { opacity:1; }
-.lp-page > div:not(.lp-pointer-light) { position:relative; z-index:1; }
-.lp-pointer-light > i {
-  display:block;
-  position:absolute;
-  width:660px;
-  height:660px;
-  left:-330px;
-  top:-330px;
-  border-radius:50%;
-  pointer-events:none;
-  background:radial-gradient(circle at center,
-    color-mix(in srgb,var(--cw-accent,#b28af0) 7%,transparent) 0%,
-    color-mix(in srgb,var(--cw-accent,#b28af0) 3.5%,transparent) 22%,
-    color-mix(in srgb,var(--cw-accent,#b28af0) 1.5%,transparent) 43%,
-    transparent 68%);
-}
-html[data-canvas-motion="subtle"] .lp-pointer-light > i { opacity:.6; }
-html[data-canvas-motion="none"] .lp-pointer-light,
-html[data-canvas-motion="off"] .lp-pointer-light { display:none; transition:none; }
-@media (prefers-reduced-motion:reduce),(hover:none),(pointer:coarse) { .lp-pointer-light { display:none; transition:none; } }
 
 .lp-page button,.lp-site-nav button {
   cursor:pointer

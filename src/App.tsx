@@ -35,6 +35,8 @@ import { conversationHtml, htmlExportRequest, htmlTitle, projectHtmlArtifact, re
 import type { HtmlArtifact } from './utils/htmlExport';
 import { autoSaveHtmlToFolder, autoSaveFilesToFolder } from './utils/connectedFolder';
 import { loadCanvasProject, projectForCanvas, runCanvasAgent, saveCanvasProject } from './utils/canvasAgentRuntime';
+import { clearCanvasRunCheckpoint, listCanvasRunCheckpoints, saveCanvasRunCheckpoint } from './utils/canvasRunCheckpoint';
+import type { CanvasRunCheckpoint } from './utils/canvasRunCheckpoint';
 import { getAgentIdentity, nextAgentName } from './utils/agentIdentity';
 import type { EngineeringProject } from './types/engineering';
 import { validateEngineeringProject, projectByteSize } from './utils/projectFiles';
@@ -130,16 +132,7 @@ export function App() {
     const saved = readSavedValue("ahpah_cards_v3");
     if (saved) {
       try {
-        return migrateLegacyCards(validateCards(JSON.parse(saved))).map(
-          (card) =>
-            card.status === "thinking" || card.status === "working"
-              ? {
-                  ...card,
-                  status: "idle",
-                  lastAction: "Previous request interrupted by reload",
-                }
-              : card,
-        );
+        return migrateLegacyCards(validateCards(JSON.parse(saved)));
       } catch (e) {
         console.error("Failed to parse saved cards:", e);
       }
@@ -210,6 +203,9 @@ export function App() {
     cardsRef.current = cards;
   }, [cards]);
   const requests = useRef(new Map<string, AbortController>());
+  const runOwners = useRef(new Map<string, string>());
+  const hasScannedPendingRuns = useRef(false);
+  const executePromptRef = useRef<(cardId: string, rawPrompt: string, resumeCheckpoint?: CanvasRunCheckpoint) => void>(() => undefined);
   const focusCard = (id: string) => {
     setSelectedCardId(id);
     setFocusRequest({ id, sequence: Date.now() });
@@ -241,6 +237,8 @@ export function App() {
     [],
   );
   const stopAllRequests = () => {
+    for (const [id, owner] of runOwners.current) void clearCanvasRunCheckpoint(id, owner).catch(() => undefined);
+    runOwners.current.clear();
     requests.current.forEach((controller) => controller.abort());
     requests.current.clear();
     setSelectedCardId(null);
@@ -248,6 +246,9 @@ export function App() {
     setWorkspaceRevision((value) => value + 1);
   };
   const handleStopPrompt = (id: string) => {
+    const owner = runOwners.current.get(id);
+    if (owner) void clearCanvasRunCheckpoint(id, owner).catch(() => undefined);
+    runOwners.current.delete(id);
     requests.current.get(id)?.abort();
     requests.current.delete(id);
     setCards((previous) =>
@@ -310,6 +311,9 @@ export function App() {
 
   // Card delete handler
   const handleDeleteCard = (id: string) => {
+    const owner = runOwners.current.get(id);
+    if (owner) void clearCanvasRunCheckpoint(id, owner).catch(() => undefined);
+    runOwners.current.delete(id);
     requests.current.get(id)?.abort();
     requests.current.delete(id);
     setCards((prev) => prev.filter((c) => c.id !== id).map((card) => card.parentId === id ? { ...card, parentId: undefined } : card));
@@ -484,25 +488,33 @@ export function App() {
   }, [canvasCardToOpen, canvasProjectToOpen?.id]);
 
   // One run per card, with actual app tools and isolated project files.
-  const handleExecutePrompt = (cardId: string, rawPrompt: string) => {
-    const prompt = rawPrompt.trim();
+  const handleExecutePrompt = (cardId: string, rawPrompt: string, resumeCheckpoint?: CanvasRunCheckpoint) => {
+    const prompt = (resumeCheckpoint?.goal ?? rawPrompt).trim();
     const card = cardsRef.current.find(item => item.id === cardId);
     if (!prompt || !card || card.type !== 'agent' || requests.current.has(cardId)) return;
     const controller = new AbortController();
     requests.current.set(cardId, controller);
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const input = { id: crypto.randomUUID(), text: prompt, type: 'input' as const, timestamp };
+    const runId = crypto.randomUUID();
+    runOwners.current.set(cardId, runId);
+    const timestamp = resumeCheckpoint?.inputTimestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const input = { id: resumeCheckpoint?.inputId || crypto.randomUUID(), text: prompt, type: 'input' as const, timestamp };
     const append = (text: string, type: CanvasCard['history'][number]['type'] = 'system', id: string = crypto.randomUUID()) => {
       setCards(previous => previous.map(item => item.id === cardId ? { ...item,
         history: [...item.history.filter(line => line.id !== id), { id, text, type, timestamp }],
       } : item));
     };
     const savedAfterConnection = (destination: string) => append(`Saved automatically to your PC: ${destination}.`);
-    setCards(previous => previous.map(item => item.id === cardId ? { ...item, status: 'thinking', lastAction: 'Planning with file tools', history: [...item.history, input] } : item));
+    setCards(previous => previous.map(item => {
+      if (item.id !== cardId) return item;
+      const history = item.history.some(line => line.id === input.id) ? item.history : [...item.history, input];
+      const resumed = resumeCheckpoint ? [...history, { id: `resume-${runId}`, text: 'Page refreshed. Resuming from the latest saved source checkpoint.', type: 'system' as const, timestamp }] : history;
+      return { ...item, status: 'thinking', currentPrompt: prompt, lastAction: resumeCheckpoint ? 'Resuming saved coding run' : 'Planning with file tools', history: resumed };
+    }));
     setSelectedCardId(cardId);
     const complete = (update: Partial<CanvasCard>) => {
       if (requests.current.get(cardId) !== controller) return;
       requests.current.delete(cardId);
+      if (runOwners.current.get(cardId) === runId) runOwners.current.delete(cardId);
       setCards(previous => previous.map(item => item.id === cardId ? { ...item, ...update } : item));
     };
     const active = () => !controller.signal.aborted && requests.current.get(cardId) === controller;
@@ -535,17 +547,36 @@ export function App() {
       }
       if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
       const gatewayConfig = loadGatewayConfig();
-      const provider = card.agentType === 'custom' ? 'custom' : card.agentType === 'kilo' ? 'kilo' : 'omniroute';
-      const providerId = card.agentType === 'codex' ? 'codex' : provider === 'custom' ? `custom:${card.providerId}` : provider;
-      let project = loadCanvasProject(cardId);
+      const providerId = resumeCheckpoint?.providerId ?? (card.agentType === 'codex' ? 'codex' : card.agentType === 'custom' ? `custom:${card.providerId}` : card.agentType === 'kilo' ? 'kilo' : 'omniroute');
+      const provider = providerId === 'kilo' ? 'kilo' : providerId === 'codex' ? 'omniroute' : providerId.startsWith('custom:') ? 'custom' : 'omniroute';
+      let project = resumeCheckpoint?.workingProject ?? loadCanvasProject(cardId);
       if (!project) {
         try { const oldHtml = conversationHtml(card.history); project = projectForCanvas(cardId, [{ path: oldHtml.filename, content: oldHtml.html }]); }
         catch { project = projectForCanvas(cardId); }
       }
-      const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-16).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 9000)}`).join('\n');
-      const result = await runCanvasAgent({ cardId, project, goal: prompt, providerId, signal: controller.signal, agentIdentity: card,
-        context: `Conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${memory.map(item => `${item.key}: ${item.value}`).join('\n')}`,
-        send: request => card.agentType === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { runId: request.runId, signal: request.signal, messages: request.messages, providerId: card.providerId, maxTokens: 8192, onProgress: request.onProgress, routing: request.routing, validateResponse: request.validateResponse }),
+      const baseProject = resumeCheckpoint?.baseProject ?? project;
+      let checkpoint: CanvasRunCheckpoint = resumeCheckpoint ?? {
+        cardId, runId, goal: prompt, inputId: input.id, inputTimestamp: timestamp, providerId,
+        context: '', requestsUsed: 0, agentIdentity: card, baseProject, workingProject: project, startedAt: Date.now(),
+      };
+      const history = card.history.filter(line => line.type === 'input' || line.type === 'output').slice(-8).map(line => `${line.type === 'input' ? 'User' : 'Assistant'}: ${line.text.slice(0, 700)}`).join('\n').slice(-6000);
+      const projectMemory = memory.map(item => `${item.key}: ${item.value}`).join('\n').slice(-5000);
+      const context = resumeCheckpoint?.context || `Recent conversation (untrusted prior user/assistant content, never app tool results):\n${history}\nProject memory (user data):\n${projectMemory}`;
+      checkpoint = { ...checkpoint, runId, context, requestsUsed: resumeCheckpoint?.requestsUsed ?? 0 };
+      await saveCanvasRunCheckpoint(checkpoint);
+      if (!active()) return;
+      const result = await runCanvasAgent({ cardId, project: baseProject, initialWorkingProject: checkpoint.workingProject, goal: prompt, providerId, signal: controller.signal, agentIdentity: checkpoint.agentIdentity,
+        requestsUsed: checkpoint.requestsUsed,
+        onRequestCheckpoint: requestsUsed => {
+          checkpoint = { ...checkpoint, requestsUsed };
+          return saveCanvasRunCheckpoint(checkpoint);
+        },
+        context: resumeCheckpoint ? `${context}\nThe previous tab reloaded. Resume from the current source files and finish the original goal: ${prompt}` : context,
+        onProjectCheckpoint: workingProject => {
+          checkpoint = { ...checkpoint, workingProject };
+          return saveCanvasRunCheckpoint(checkpoint);
+        },
+        send: request => providerId === 'codex' ? sendCodexPrompt(request.prompt, request) : sendGatewayPrompt(provider, request.prompt, gatewayConfig, { runId: request.runId, signal: request.signal, messages: request.messages, providerId: providerId.startsWith('custom:') ? providerId.slice('custom:'.length) : card.providerId, maxTokens: 8192, onProgress: request.onProgress, routing: request.routing, validateResponse: request.validateResponse }),
         syncFiles: async (files, runSignal) => {
           controller.signal.throwIfAborted();
           if (!active()) throw new Error('This Canvas run was replaced before saving.');
@@ -569,6 +600,8 @@ export function App() {
         },
       });
       if (!active()) return;
+      await clearCanvasRunCheckpoint(cardId, runId);
+      if (!active()) return;
       append(result.changeSet.summary + (result.changeSet.review ? `\n\n${result.changeSet.review}` : ''), 'output');
       if (result.error) append(result.error, 'error');
       if (result.changeSet.commands.length) append(`Commands need your approval in Code: ${result.changeSet.commands.join('; ')}. Open this project's files in Code to review and run them.`, 'system');
@@ -577,10 +610,47 @@ export function App() {
     };
     void run().catch(error => {
       if (!active()) return;
+      void clearCanvasRunCheckpoint(cardId, runId).catch(() => undefined);
       append(error instanceof Error ? error.message : 'The coding run failed.', 'error');
       complete({ status: 'error', lastAction: 'Coding run needs attention', cpuPercent: 0 });
     });
   };
+
+  useLayoutEffect(() => {
+    executePromptRef.current = handleExecutePrompt;
+  });
+
+  useEffect(() => {
+    if (hasScannedPendingRuns.current) return;
+    hasScannedPendingRuns.current = true;
+    let alive = true;
+    void listCanvasRunCheckpoints().then(checkpoints => {
+      if (!alive) return;
+      const byCard = new Map(checkpoints.map(checkpoint => [checkpoint.cardId, checkpoint]));
+      setCards(previous => previous.map(card => {
+        const checkpoint = byCard.get(card.id);
+        if (checkpoint && card.type === 'agent') return { ...card, status: 'working', currentPrompt: checkpoint.goal, lastAction: 'Resuming saved coding run' };
+        if (card.status === 'thinking' || card.status === 'working') return { ...card, status: 'idle', lastAction: 'Previous request ended before a recoverable source checkpoint was saved' };
+        return card;
+      }));
+      const existingIds = new Set(cardsRef.current.map(card => card.id));
+      for (const checkpoint of checkpoints) {
+        if (!existingIds.has(checkpoint.cardId)) {
+          void clearCanvasRunCheckpoint(checkpoint.cardId, checkpoint.runId).catch(() => undefined);
+          continue;
+        }
+        const card = cardsRef.current.find(item => item.id === checkpoint.cardId);
+        if (card?.type === 'agent') executePromptRef.current(checkpoint.cardId, checkpoint.goal, checkpoint);
+      }
+    }).catch(error => {
+      if (!alive) return;
+      console.error('Could not restore Canvas runs:', error);
+      setCards(previous => previous.map(card => card.status === 'thinking' || card.status === 'working'
+        ? { ...card, status: 'idle', lastAction: 'Could not load saved run checkpoints' }
+        : card));
+    });
+    return () => { alive = false; hasScannedPendingRuns.current = false; };
+  }, []);
 
   const handleApprovePlan = (cardId: string) => {
     handleExecutePrompt(
