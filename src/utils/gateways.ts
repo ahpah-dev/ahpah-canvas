@@ -280,7 +280,7 @@ export async function sendGatewayPrompt(
     routing?: AgentRoutingState;
     validateResponse?: (text: string) => void;
   } = {},
-): Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean }> {
+): Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean; responseError?: string }> {
   const isKilo = provider === "kilo";
   const custom = provider === "custom" ? config.customProviders?.find((item) => item.id === options.providerId) : undefined;
   if (provider === "custom" && !custom) throw new Error("This custom provider is no longer configured. Add it in Settings or create a card for another provider.");
@@ -412,7 +412,9 @@ export async function sendGatewayPrompt(
           stream: custom ? custom.stream : true,
           max_tokens: maxTokens,
           // Local thinking can otherwise exhaust the output budget before an answer.
-          ...(localOllama ? { reasoning_effort: 'none', ...(!nativeCoding ? { tool_choice: 'none' } : {}) } : {}),
+          // Local coding is a JSON action conversation, including text-only
+          // models. Do not leave a second, unadvertised native protocol enabled.
+          ...(localOllama ? { reasoning_effort: 'none', tool_choice: 'none', ...(nativeCoding ? { response_format: { type: 'json_object' } } : {}) } : {}),
           ...(advertiseNativeTools && (!Array.isArray(target.supported_parameters) || target.supported_parameters.includes('tools')) ? { tools: omniCodingTools, tool_choice: 'auto' } : {}),
           ...(reasoning ? { reasoning } : {}),
         }),
@@ -471,7 +473,13 @@ export async function sendGatewayPrompt(
       let nativeActions: string | undefined;
       if (nativeCoding) {
         try { nativeActions = omniToolActions(message.tool_calls); }
-        catch (failure) { throw new UnusableCodingResponseError(`${resolvedModel} returned unusable coding tools: ${failure instanceof Error ? failure.message : 'Invalid tool arguments'}`, resolvedModel); }
+        catch (failure) {
+          const detail = `${resolvedModel} returned unusable coding tools: ${failure instanceof Error ? failure.message : 'Invalid tool arguments'}`;
+          // Let the agent correct the format within its existing repair/request
+          // budget. None of this rejected native batch has executed.
+          if (localOllama) return { text: '', model: resolvedModel, tokens, responseError: detail };
+          throw new UnusableCodingResponseError(detail, resolvedModel);
+        }
       }
       const text = nativeActions ?? answerText(message?.content);
       const refusal = answerText(message?.refusal);

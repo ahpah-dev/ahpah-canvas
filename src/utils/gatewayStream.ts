@@ -71,8 +71,21 @@ export async function readGatewayStream(
         if (!Number.isSafeInteger(index) || index < 0 || index >= 8) throw new Error('The gateway returned too many coding tools.');
         const call = tools.get(index) || { id: '', type: 'function', function: { name: '', arguments: '' } };
         if (typeof part.id === 'string') call.id = part.id;
-        if (typeof part.function?.name === 'string') call.function.name += part.function.name;
-        if (typeof part.function?.arguments === 'string') call.function.arguments += part.function.arguments;
+        if (typeof part.function?.name === 'string') {
+          const name = part.function.name;
+          // Some compatible servers repeat the full name or send a cumulative
+          // snapshot. OpenAI-style fragments still concatenate normally.
+          if (!choice.delta || name.startsWith(call.function.name)) call.function.name = name;
+          else call.function.name += name;
+        }
+        if (typeof part.function?.arguments === 'string') {
+          if (!choice.delta) call.function.arguments = part.function.arguments;
+          else call.function.arguments += part.function.arguments;
+        } else if (part.function?.arguments && typeof part.function.arguments === 'object' && !Array.isArray(part.function.arguments)) {
+          const argumentsJson = JSON.stringify(part.function.arguments);
+          if (call.function.arguments && call.function.arguments !== argumentsJson) throw new Error('The gateway mixed incompatible coding argument fragments.');
+          call.function.arguments = argumentsJson;
+        }
         if (call.function.arguments.length > 280_000 || call.function.name.length > 100) throw new Error('The gateway returned oversized coding tools.');
         tools.set(index, call);
       }

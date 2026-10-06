@@ -255,11 +255,14 @@ export async function runEngineeringAgent(options: {
         }
       } else cutoffRecoveries = 0;
       let actions: AgentAction[];
-      try { actions = parseAgentActions(result.text); repairs = 0; } catch (failure) {
+      try {
+        if (result.responseError) throw new Error(result.responseError);
+        actions = parseAgentActions(result.text); repairs = 0;
+      } catch (failure) {
         const detail = failure instanceof Error ? failure.message : 'Invalid coding actions.';
         emit('notice', 'Repairing response format', detail);
         if (++repairs > 2) throw new Error(`${detail} Try another model or a smaller goal. Any staged files have been kept.`);
-        prompt = `Your previous response could not be used: ${detail} Return only the documented JSON object. No Markdown or prose. Project files have not changed. Original goal: ${goal}`;
+        prompt = `Your previous response could not be used: ${detail} Return only the documented JSON object {"actions":[...]}, using the documented tool names and argument fields. Do not call an external or invented function. No Markdown or prose. No actions from that response executed. Original goal: ${goal}${options.localModel ? `\nActual current state: ${JSON.stringify({ plan, files: working.map(file => ({ path: file.path, characters: file.content.length })), changedFiles: diffProjectFiles(original, working).map(change => ({ path: change.path, reviewed: reviewed.has(change.path) })), unresolvedTools: [...unresolvedTools] })}` : ''}`;
         continue;
       }
       const results: unknown[] = [];

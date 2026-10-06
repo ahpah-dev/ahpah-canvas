@@ -50,7 +50,7 @@ export type AgentSender = (request: {
   onProgress?: (progress: AgentProgress) => void;
   routing?: AgentRoutingState;
   validateResponse?: (text: string) => void;
-}) => Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean }>;
+}) => Promise<{ text: string; model: string; tokens: number; outputTruncated?: boolean; responseError?: string }>;
 
 export type AgentPhase = 'planning' | 'implementing' | 'reviewing' | 'ready' | 'error' | 'stopped';
 export interface AgentActivity {
