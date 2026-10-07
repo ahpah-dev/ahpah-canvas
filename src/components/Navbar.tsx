@@ -116,12 +116,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="cw-nav-project">
         <span>/</span>
         <FolderKanban size={13} />
-        <span>{currentView === "code" ? "Engineering workspace" : "My workspace"}</span>
+        <span>{currentView === "code" ? "Code workspace" : "Project canvas"}</span>
         <span className="cw-nav-local">{supportsLocalBridge() ? "LOCAL" : "BROWSER"}</span>
       </div>
       <nav aria-label="Workspace navigation">
         <FolderConnection />
-        <button onClick={onOpenOneClickSetup} aria-label="Getting started" title="Getting started"><CircleHelp size={15} /><span>Guide</span></button>
+        <button onClick={onOpenOneClickSetup} aria-label="Getting started" title="Getting started"><CircleHelp size={15} /><span>Quick start</span></button>
         {currentView === "canvas" && <>
         <button onClick={onOpenMemory} aria-label="Project memory">
           <Database size={14} />
@@ -135,7 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </>}
         <button onClick={onOpenSettings} aria-label="Settings">
           <Settings size={15} />
-          <span>{currentView === "code" ? "Models & settings" : "Settings"}</span>
+          <span>Settings</span>
         </button>
       </nav>
     </header>

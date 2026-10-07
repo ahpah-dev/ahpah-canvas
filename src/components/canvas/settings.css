@@ -453,8 +453,8 @@ html[data-canvas-motion="subtle"] {
 .cw-card,
 .cw-modal,
 .cw-add-menu {
-  background: var(--cw-panel) !important;
-  border-color: var(--cw-border) !important;
+  background: var(--cw-panel);
+  border-color: var(--cw-border);
 }
 .cw-shell,
 .cw-canvas {

@@ -16,6 +16,10 @@ import {
   Palette,
   Square,
   ChevronDown,
+  Cpu,
+  Code2,
+  Plug,
+  ArrowRight,
 } from "lucide-react";
 import {
   listKiloModels,
@@ -51,6 +55,7 @@ import {
 
 interface SettingsModalProps {
   isOpen: boolean;
+  connectionTarget?: 'local' | 'hosted';
   onClose: () => void;
   isSimulated: boolean;
   onToggleSimulated: (val: boolean) => void;
@@ -106,6 +111,7 @@ const Field = ({
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
+  connectionTarget,
   onClose,
   isSimulated,
   onToggleSimulated,
@@ -118,6 +124,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useDialogFocus(isOpen, onClose);
   const present = useDialogPresence(isOpen);
   const [tab, setTab] = useState<"connections" | "appearance">("connections");
+  const [previousTarget, setPreviousTarget] = useState(connectionTarget);
+  if (connectionTarget !== previousTarget) {
+    setPreviousTarget(connectionTarget);
+    if (connectionTarget) setTab('connections');
+  }
+  const hostedOptions = useRef<HTMLDetailsElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const jumpToConnection = (id: string) => {
+    if (id !== 'local' && hostedOptions.current) hostedOptions.current.open = true;
+    requestAnimationFrame(() => {
+      const section = dialog.current?.querySelector<HTMLElement>(`#connection-${id}`);
+      section?.scrollIntoView({ block: 'start', behavior: 'instant' });
+      section?.focus({ preventScroll: true });
+    });
+  };
+  useEffect(() => {
+    if (!isOpen || !connectionTarget) return;
+    const frame = requestAnimationFrame(() => {
+      if (hostedOptions.current) hostedOptions.current.open = connectionTarget === 'hosted';
+      const section = dialog.current?.querySelector<HTMLElement>(`#connection-${connectionTarget === 'local' ? 'local' : 'codex'}`);
+      section?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, connectionTarget]);
   const [omniRouteUrl, setOmniRouteUrl] = useState(
     () => loadGatewayConfig().omniRouteUrl,
   );
@@ -408,6 +438,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }}
     >
       <div
+        ref={dialog}
         role="dialog"
         aria-hidden={!isOpen}
         aria-modal="true"
@@ -424,10 +455,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 id="settings-title"
                 className="text-base font-semibold tracking-tight text-white"
               >
-                Workspace settings
+                Make it your workspace.
               </h2>
               <p className="mt-0.5 text-xs text-slate-400">
-                Your connections. Your colors. Your way of working.
+                Connect your models. Find your focus.
               </p>
             </div>
           </div>
@@ -470,7 +501,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             aria-controls="connections-panel"
             onClick={() => setTab("connections")}
           >
-            <Radio size={14} /> Connections & auto setup
+            <Radio size={14} /> Connections
           </button>
           <button
             id="appearance-tab"
@@ -493,6 +524,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onChange={() => setSaved(false)}
             className="cw-settings-body space-y-5 overflow-y-auto p-5 sm:p-8"
           >
+            <section className="cw-connection-directory" aria-label="Connection shortcuts">
+              <div><span className="cw-studio-eyebrow">YOUR INTELLIGENCE, CONNECTED</span><h3>Choose a place to start.</h3><p>Jump to a connection. Model setup and downloads stay under your control.</p></div>
+              <nav aria-label="Jump to provider">
+                {([
+                  { id: 'local', name: 'Local AI', detail: 'On your device', icon: Cpu },
+                  { id: 'codex', name: 'Codex', detail: 'GPT subscription', icon: Code2 },
+                  { id: 'omniroute', name: 'OmniRoute', detail: 'Model gateway', icon: Radio },
+                  { id: 'kilo', name: 'Kilo', detail: 'Free routing', icon: Sparkles },
+                  { id: 'custom', name: 'Custom API', detail: 'Your endpoint', icon: Plug },
+                ] as const).map(connection => <button key={connection.id} type="button" onClick={() => jumpToConnection(connection.id)}><connection.icon size={17} /><strong>{connection.name}</strong><small>{connection.detail}</small><ArrowRight size={12} /></button>)}
+              </nav>
+            </section>
+            <div id="connection-local" tabIndex={-1} role="group" aria-label="Local model setup" className="cw-connection-destination">
             <LocalModelsPanel active={isOpen} disabled={running || checkingCatalog || omniQuickRunning} providers={customProviders} onUse={(provider, destination) => {
               try {
                 const next = [...customProviders.filter(item => item.id !== provider.id), provider];
@@ -509,10 +553,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setSaveError(error instanceof Error ? error.message : 'Could not save the local model connection.');
               }
             }} />
-            <details className="cw-connection-options">
+            </div>
+            <details ref={hostedOptions} className="cw-connection-options">
             <summary>Hosted & custom providers <span>Codex · OmniRoute · Kilo · your API</span></summary>
             <div>
-            <CodexConnectionPanel onConnected={onConnectCodex} />
+            <div id="connection-codex" tabIndex={-1} role="group" aria-label="Codex connection" className="cw-connection-destination"><CodexConnectionPanel onConnected={onConnectCodex} /></div>
             <section className="cw-auto-setup">
               <div className="cw-auto-heading">
                 <span className="cw-icon-tile">
@@ -648,7 +693,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </section>
             {!supportsLocalBridge() && <div className="cw-hosted-connection-note"><strong>Choose a browser-compatible API</strong><p>This site has no gateway server. Custom HTTPS providers that allow browser access work here. Kilo and local HTTP providers need the local app.</p><a href="https://github.com/ahpah-dev/ahpah-canvas#start-locally" target="_blank" rel="noreferrer">Get the local app <ChevronDown size={12} /></a></div>}
-            <div className="mb-5"><OmniRouteSetupButton config={config} disabled={running || checkingCatalog} onRunningChange={setOmniQuickRunning} onConnected={result => {
+            <div id="connection-omniroute" tabIndex={-1} role="group" aria-label="OmniRoute setup" className="cw-connection-destination mb-5"><OmniRouteSetupButton config={config} disabled={running || checkingCatalog} onRunningChange={setOmniQuickRunning} onConnected={result => {
               setOmniRouteUrl(result.config.omniRouteUrl); setOmniRouteModel(result.config.omniRouteModel);
               setOmniModels(result.models); setOmniState('verified'); setOmniError('');
               setTransport('bridge'); onToggleSimulated(false); onConnectOmniRoute();
@@ -668,7 +713,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <option value="direct">Browser · direct API</option>
                 </select></label>
               </section>
-              <section className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-300/[.055] to-transparent p-5 sm:p-6">
+              <section className="cw-provider-credentials rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-300/[.055] to-transparent p-5 sm:p-6">
                 <div className="mb-5 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-300/10 text-violet-200">
@@ -752,7 +797,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-300/[.05] to-transparent p-5 sm:p-6">
+              <section id="connection-kilo" tabIndex={-1} aria-label="Kilo connection" className="cw-connection-destination rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-300/[.05] to-transparent p-5 sm:p-6">
                 <div className="mb-5 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200">
@@ -839,7 +884,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </section>
 
-              <CustomProvidersPanel providers={customProviders} config={config} disabled={running || checkingCatalog || omniQuickRunning} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
+              <div id="connection-custom" tabIndex={-1} role="group" aria-label="Custom API providers" className="cw-connection-destination"><CustomProvidersPanel providers={customProviders} config={config} disabled={running || checkingCatalog || omniQuickRunning} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
                 try {
                   saveGatewayConfig(config);
                   setSaveError("");
@@ -847,7 +892,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 } catch (error) {
                   setSaveError(error instanceof Error ? error.message : "Could not save this provider.");
                 }
-              }} />
+              }} /></div>
               <section className="flex items-center justify-between gap-4 rounded-2xl border border-white/[.07] bg-white/[.025] p-4 sm:px-5">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 text-violet-200">
@@ -883,37 +928,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {saveError}
               </p>
             )}
-            <div className="flex flex-col-reverse justify-between gap-3 border-t border-white/[.07] pt-5 sm:flex-row sm:items-center">
-              <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                <Activity size={13} />
-                Keys are stored in this browser only.
-              </p>
-              <div className="flex items-center justify-end gap-3">
-                {saved && (
-                  <span
-                    role="status"
-                    className="inline-flex items-center gap-1 text-xs text-cyan-300"
-                  >
-                    <Check size={14} />
-                    Saved
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-xl px-4 py-2.5 text-xs font-medium text-slate-400 transition hover:text-white"
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  disabled={running || checkingCatalog || omniQuickRunning}
-                  className="rounded-xl bg-violet-300 px-4 py-2.5 text-xs font-semibold text-slate-950 shadow-lg shadow-violet-300/10 transition hover:bg-violet-200"
-                >
-                  Save changes
-                </button>
-              </div>
-            </div>
           </form>
         ) : (
           <div
@@ -925,6 +939,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <AppearancePanel />
           </div>
         )}
+        <footer className="cw-settings-footer">
+          <span><Activity size={13} />{tab === 'connections' ? 'Credentials stay in this browser.' : 'Appearance changes save automatically.'}</span>
+          <div>{tab === 'connections' && saved && <span className="cw-settings-saved" role="status"><Check size={13} />Saved</span>}<button type="button" className="cw-soft-button" onClick={onClose}>{tab === 'connections' ? 'Close' : 'Done'}</button>{tab === 'connections' && <button type="submit" form="connections-panel" className="cw-primary-button" disabled={running || checkingCatalog || omniQuickRunning}>Save changes<Check size={13} /></button>}</div>
+        </footer>
       </div>
     </div>
   );

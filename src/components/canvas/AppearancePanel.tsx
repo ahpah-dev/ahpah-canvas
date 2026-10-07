@@ -53,7 +53,7 @@ export function AppearancePanel() {
             {
               id: "midnight",
               name: "Midnight",
-              description: "Soft violet, deep contrast",
+              description: "Deep charcoal, clear contrast",
             },
             {
               id: "graphite",

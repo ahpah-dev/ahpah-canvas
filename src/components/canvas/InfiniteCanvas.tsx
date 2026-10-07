@@ -10,10 +10,8 @@ import React, {
 import {
   Plus,
   Radio,
-  Sparkles,
   FileText,
   Globe,
-  Terminal,
   Code2,
   LayoutGrid,
   Grid2X2,
@@ -37,6 +35,7 @@ import { AgentCard } from "./AgentCard";
 import { BrowserPreviewCard } from "./BrowserPreviewCard";
 import { TerminalCard } from "./TerminalCard";
 import { NoteCard } from "./NoteCard";
+import { AddCardMenu } from './AddCardMenu';
 import {
   arrangeCards,
   fitCamera,
@@ -44,7 +43,6 @@ import {
   type Camera,
 } from "../../utils/canvasGeometry";
 import { cardName } from "../../utils/cardPresentation";
-import { loadGatewayConfig } from "../../utils/gateways";
 import { createFrameQueue } from "../../utils/interactionScheduling";
 import "./canvas.css";
 import "./workspacePolish.css";
@@ -150,8 +148,6 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   const [moving, setMoving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const addToggle = useRef<HTMLButtonElement>(null);
-  const addClose = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (addOpen) addClose.current?.focus(); }, [addOpen]);
   const menuRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{
     kind: "pan" | "drag" | "resize";
@@ -451,92 +447,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
         >
           <Plus size={14} /> Add card <ChevronDown size={12} />
         </button>
-        {addOpen && (
-          <div id="cw-add-card-dialog" className="cw-add-menu" role="dialog" aria-label="Add a canvas card" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAddOpen(false); addToggle.current?.focus(); } }}>
-            <div className="cw-menu-heading">
-              ADD TO YOUR WORKSPACE{" "}
-              <button
-                ref={addClose}
-                aria-label="Close add menu"
-                onClick={() => { setAddOpen(false); addToggle.current?.focus(); }}
-              >
-                <X size={13} />
-              </button>
-            </div>
-            <p className="cw-menu-description">Choose a teammate or bring project context into view.</p>
-            <span className="cw-menu-category">CODING AGENTS</span>
-            <button onClick={() => add("agent", "omniroute")}>
-              <span className="cw-icon-tile">
-                <Radio size={17} />
-              </span>
-              <div>
-                OmniRoute agent<small>Your gateway’s current models</small>
-              </div>
-              <Plus size={13} />
-            </button>
-            <button onClick={() => add("agent", "kilo")}>
-              <span className="cw-icon-tile cyan">
-                <Sparkles size={17} />
-              </span>
-              <div>
-                Kilo Auto Free<small>Dynamic free model routing</small>
-              </div>
-              <Plus size={13} />
-            </button>
-            <button onClick={() => add("agent", "codex")}>
-              <span className="cw-icon-tile">
-                <Code2 size={17} />
-              </span>
-              <div>
-                Codex agent<small>Use your ChatGPT subscription</small>
-              </div>
-              <Plus size={13} />
-            </button>
-            <div className="cw-menu-divider" />
-            {(loadGatewayConfig().customProviders || []).map((provider) => (
-              <button key={provider.id} onClick={() => add("agent", "custom", provider.id)}>
-                <span className="cw-icon-tile"><Radio size={17} /></span>
-                <div>{provider.name}<small>{provider.model || "Choose a model in Settings"}</small></div>
-                <Plus size={13} />
-              </button>
-            ))}
-            <button onClick={() => { setAddOpen(false); props.onOpenSettings(); }}>
-              <span className="cw-icon-tile"><Plus size={17} /></span>
-              <div>Custom API provider<small>Connect your own model endpoint</small></div>
-              <ChevronDown size={13} />
-            </button>
-            <div className="cw-menu-divider" />
-            <span className="cw-menu-category">PROJECT CONTEXT</span>
-            <button onClick={() => add("note")}>
-              <span className="cw-icon-tile amber">
-                <FileText size={17} />
-              </span>
-              <div>
-                Project notes<small>Ideas, decisions, and checklists</small>
-              </div>
-              <Plus size={13} />
-            </button>
-            <button onClick={() => add("browser")}>
-              <span className="cw-icon-tile cyan">
-                <Globe size={17} />
-              </span>
-              <div>
-                Browser preview<small>A real embedded web page</small>
-              </div>
-              <Plus size={13} />
-            </button>
-            <button onClick={() => add("terminal")}>
-              <span className="cw-icon-tile">
-                <Terminal size={17} />
-              </span>
-              <div>
-                Command scratchpad
-                <small>Keep commands close to your work</small>
-              </div>
-              <Plus size={13} />
-            </button>
-          </div>
-        )}
+        {addOpen && <AddCardMenu key={props.providerConfigRevision} onAdd={add} onClose={() => { setAddOpen(false); addToggle.current?.focus(); }} onOpenSettings={() => { setAddOpen(false); props.onOpenSettings(); }} />}
       </div>
       <div
         className="cw-world"

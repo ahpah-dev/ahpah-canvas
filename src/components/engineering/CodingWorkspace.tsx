@@ -1,6 +1,6 @@
 import React, { useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ChevronDown, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search, Radio } from 'lucide-react';
+import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ChevronDown, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search, Radio, Bug, BookOpen, Cpu } from 'lucide-react';
 import type { AgentActivity, AgentPhase, AgentSender, EngineeringChangeSet, EngineeringProject, EngineeringProvider, ProjectChange } from '../../types/engineering';
 import { applyProjectChanges, buildProjectPreview, createChangeSet, createProjectZip, createStarterProject, importSourceFiles, inverseProjectChanges, normalizeProjectPath, PROJECT_STORAGE_KEY, projectByteSize, validateChangeSet, validateEngineeringProject } from '../../utils/projectFiles';
 import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRuntime';
@@ -11,8 +11,10 @@ import { autoSaveFilesToFolder, saveHtmlToFolder } from '../../utils/connectedFo
 import { SourceEditor } from './SourceEditor';
 import { CodeCommandPalette, type WorkspaceCommand } from './CodeCommandPalette';
 import { sourceLanguage } from '../../utils/sourceHighlight';
+import { ProjectMenu } from './ProjectMenu';
 import './engineering.css';
 import './codeInterface.css';
+import './codeStudio.css';
 
 export interface CodingWorkspaceProps { send: AgentSender; providers: EngineeringProvider[]; onOpenSettings: () => void; localExecution: boolean; canvasProject?: EngineeringProject; canvasCommands?: string[]; onCanvasProjectChange?: (project: EngineeringProject, signal: AbortSignal) => Promise<string> }
 
@@ -44,6 +46,10 @@ function loadWorkspace(): WorkspaceSession {
 const timeLabel = (timestamp: string) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const phaseLabel: Record<AgentPhase, string> = { planning: 'Planning', implementing: 'Building', reviewing: 'Reviewing', ready: 'Ready for review', error: 'Needs attention', stopped: 'Stopped' };
 const changeLabel = (change: ProjectChange) => change.before === null ? 'Added' : change.after === null ? 'Deleted' : 'Modified';
+const sourceBadge = (path: string) => {
+  const language = sourceLanguage(path);
+  return ({ JavaScript: 'JS', TypeScript: 'TS', Markdown: 'MD', Python: 'PY', Shell: 'SH' } as Record<string, string>)[language] ?? (language.length <= 4 ? language : 'FILE');
+};
 
 function DiffPanel({ change }: { change: ProjectChange }) {
   const before = (change.before ?? '').split('\n');
@@ -80,14 +86,22 @@ function EngineeringProviderPicker({ providers, value, disabled, dismiss, onChan
   // Clear a blocked request before commit so ending a run/dialog cannot reopen the picker.
   if (requestedOpen && (disabled || dismiss)) setOpen(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [query, setQuery] = useState('');
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const popoverId = useId();
   const listboxId = useId();
   const selectedIndex = providers.findIndex(provider => provider.id === value);
-  const activeProvider = providers[activeIndex];
+  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const visibleProviders = providers.filter(provider => {
+    const text = `${provider.label} ${provider.model} ${provider.localModel ? 'local ollama on device' : 'hosted api provider'}`.toLowerCase();
+    return terms.every(term => text.includes(term));
+  });
+  const activeProvider = visibleProviders[activeIndex];
   const selectedProvider = providers[selectedIndex];
 
   useEffect(() => {
@@ -96,8 +110,16 @@ function EngineeringProviderPicker({ providers, value, disabled, dismiss, onChan
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setOpen(false);
     };
+    const closeOnOutsideFocus = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setOpen(false);
+    };
     document.addEventListener('pointerdown', closeOnOutsidePointer);
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('focusin', closeOnOutsideFocus);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('focusin', closeOnOutsideFocus);
+    };
   }, [open]);
 
   useLayoutEffect(() => {
@@ -173,9 +195,10 @@ function EngineeringProviderPicker({ providers, value, disabled, dismiss, onChan
   const openPicker = () => {
     if (disabled || dismiss) return;
     setPortalTarget(document.body);
+    setQuery('');
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : providers.length ? 0 : -1);
     setOpen(true);
-    requestAnimationFrame(() => (listboxRef.current ?? popoverRef.current)?.focus());
+    requestAnimationFrame(() => (searchRef.current ?? popoverRef.current)?.focus());
   };
 
   const closePicker = (restoreFocus = false) => {
@@ -199,37 +222,37 @@ function EngineeringProviderPicker({ providers, value, disabled, dismiss, onChan
     if (event.key === 'Escape') {
       event.preventDefault();
       closePicker(true);
-    } else if (event.key === 'ArrowDown' && providers.length) {
+    } else if (event.key === 'ArrowDown' && visibleProviders.length) {
       event.preventDefault();
-      setActiveIndex(index => Math.min(index < 0 ? 0 : index + 1, providers.length - 1));
-    } else if (event.key === 'ArrowUp' && providers.length) {
+      setActiveIndex(index => Math.min(index < 0 ? 0 : index + 1, visibleProviders.length - 1));
+    } else if (event.key === 'ArrowUp' && visibleProviders.length) {
       event.preventDefault();
-      setActiveIndex(index => Math.max(index < 0 ? providers.length - 1 : index - 1, 0));
-    } else if (event.key === 'Enter' && activeProvider) {
+      setActiveIndex(index => Math.max(index < 0 ? visibleProviders.length - 1 : index - 1, 0));
+    } else if (event.key === 'Enter' && activeProvider && (event.target === searchRef.current || event.target === listboxRef.current)) {
       event.preventDefault();
       chooseProvider(activeProvider);
-    } else if (event.key === 'Tab') {
-      closePicker();
     }
   };
 
   return <div className="eng-provider-select" ref={rootRef} onKeyDown={handleKeyDown}>
     <span className="eng-provider-field-label">MODEL FOR THIS RUN</span>
-    <button ref={triggerRef} type="button" className="eng-provider-trigger" aria-label={selectedProvider ? `Choose provider and model. Selected ${selectedProvider.label}, ${selectedProvider.model}` : 'Choose a provider and model'} title={selectedProvider ? `${selectedProvider.label} · ${selectedProvider.model}` : undefined} aria-haspopup={providers.length ? 'listbox' : 'dialog'} aria-expanded={open} aria-controls={open && providers.length ? listboxId : undefined} disabled={disabled} onClick={() => open ? closePicker() : openPicker()}>
-      <span className="eng-provider-select-icon" aria-hidden="true"><Radio size={14} /></span>
-      <span className="eng-provider-trigger-copy"><strong>{selectedProvider?.label ?? 'Configure a provider'}</strong><small>{selectedProvider?.model || (providers.length ? 'Choose a model in Settings' : 'No coding provider connected')}</small></span>
+    <button ref={triggerRef} type="button" className="eng-provider-trigger" aria-label={selectedProvider ? `Choose provider and model. Selected ${selectedProvider.label}, ${selectedProvider.model}` : 'Choose a provider and model'} title={selectedProvider ? `${selectedProvider.label} · ${selectedProvider.model}` : undefined} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onClick={() => open ? closePicker() : openPicker()}>
+      <span className="eng-provider-select-icon" aria-hidden="true">{selectedProvider?.localModel ? <Cpu size={14} /> : <Radio size={14} />}</span>
+      <span className="eng-provider-trigger-copy"><strong>{selectedProvider?.model || 'Connect a model'}</strong><small>{selectedProvider?.label ?? 'Open provider settings'}</small></span>
       <ChevronDown size={13} className="eng-provider-select-chevron" aria-hidden="true" />
     </button>
-    {open && portalTarget && createPortal(<div className="eng-provider-popover" ref={popoverRef} role={!providers.length ? 'dialog' : undefined} aria-label={!providers.length ? 'Provider setup' : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-      <header className="eng-provider-popover-header"><div><span>MODEL ROUTING</span><strong>Choose provider &amp; model</strong></div><span className="eng-provider-count">{providers.length} {providers.length === 1 ? 'route' : 'routes'}</span></header>
+    {open && portalTarget && createPortal(<div id={popoverId} className="eng-provider-popover eng-provider-studio" ref={popoverRef} role="dialog" aria-label="Choose a coding model" tabIndex={-1} onKeyDown={event => { event.stopPropagation(); handleKeyDown(event); }}>
+      <header className="eng-provider-popover-header"><div><strong>Run with a model</strong></div><span className="eng-provider-count">{providers.length} {providers.length === 1 ? 'route' : 'routes'}</span></header>
+      {providers.length > 0 && <label className="eng-provider-search"><Search size={13} aria-hidden="true" /><input ref={searchRef} type="search" role="combobox" aria-label="Search configured models" aria-autocomplete="list" aria-expanded={open} aria-controls={listboxId} aria-activedescendant={activeProvider ? `${listboxId}-${activeIndex}` : undefined} placeholder="Search models or providers…" value={query} onChange={event => { setQuery(event.target.value); setActiveIndex(0); }} /></label>}
       {providers.length ? <div className="eng-provider-options" id={listboxId} role="listbox" aria-label="Coding providers" aria-activedescendant={activeProvider ? `${listboxId}-${activeIndex}` : undefined} tabIndex={-1} ref={listboxRef}>
-        {providers.map((provider, index) => <div id={`${listboxId}-${index}`} key={provider.id} role="option" aria-selected={provider.id === value} className={`eng-provider-option${provider.id === value ? ' is-selected' : ''}${index === activeIndex ? ' is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onMouseDown={event => event.preventDefault()} onClick={() => chooseProvider(provider)}>
-          <span className="eng-provider-option-mark"><Radio size={14} /></span>
-          <span className="eng-provider-option-copy"><strong>{provider.label}</strong><small>{provider.model || 'Choose a model in Settings'}</small></span>
+        {visibleProviders.map((provider, index) => <div id={`${listboxId}-${index}`} key={provider.id} role="option" aria-selected={provider.id === value} className={`eng-provider-option${provider.id === value ? ' is-selected' : ''}${index === activeIndex ? ' is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onMouseDown={event => event.preventDefault()} onClick={() => chooseProvider(provider)}>
+          <span className="eng-provider-option-mark">{provider.localModel ? <Cpu size={14} /> : <Radio size={14} />}</span>
+          <span className="eng-provider-option-copy"><strong title={provider.model}>{provider.model || 'No model selected'}</strong><small>{provider.label}{provider.localModel ? ' · On device' : ''}</small></span>
           {provider.id === value && <Check size={14} className="eng-provider-option-check" />}
         </div>)}
+        {!visibleProviders.length && <div className="eng-provider-no-match" role="status">No connected models match “{query}”.</div>}
       </div> : <div className="eng-provider-empty"><span className="eng-provider-empty-mark"><Radio size={16} /></span><strong>No coding model connected</strong><p>Add a provider in Settings to choose a model for this project.</p><button type="button" className="eng-provider-settings" onClick={() => { closePicker(); onOpenSettings(); }}><Settings2 size={12} />Open provider settings<ExternalLink size={11} /></button></div>}
-      {providers.length > 0 && <footer className="eng-provider-popover-footer">Used for your next Build or Explain run.</footer>}
+      {providers.length > 0 && <footer className="eng-provider-popover-footer"><span>↑ ↓ select · Enter to use</span><button type="button" onClick={() => { closePicker(); onOpenSettings(); }}><Plus size={12} />Add models</button></footer>}
     </div>, portalTarget)}
   </div>;
 }
@@ -639,7 +662,11 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
   const focusGoal = (mode?: 'build' | 'explain', suggestion?: string) => {
     if (mode) setGoalMode(mode);
     if (suggestion) setGoal(suggestion);
-    requestAnimationFrame(() => goalInput.current?.focus());
+    requestAnimationFrame(() => {
+      const input = goalInput.current;
+      input?.focus();
+      if (input && suggestion) input.setSelectionRange(input.value.length, input.value.length);
+    });
   };
 
   const projectLocked = busy || executionBusy || folderSaving;
@@ -661,17 +688,21 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
     ...projectFiles.map(file => ({ id: `file:${file.path}`, kind: 'file' as const, label: file.path, detail: `${sourceLanguage(file.path) || 'Plain text'} · ${file.content.split('\n').length.toLocaleString()} lines${file.path === activeFile?.path ? ' · currently open' : ''}`, icon: FileCode2, onSelect: () => openFile(file.path) })),
   ] : [];
 
-  return <div ref={workspaceRoot} className="eng-workspace">
+  return <div ref={workspaceRoot} className="eng-workspace eng-studio">
     <header className="eng-project-strip">
-        <div className="eng-project-heading"><span className="eng-project-mark"><Code2 size={18} /></span><div><span className="eng-eyebrow">ENGINEERING WORKSPACE</span><input aria-label="Project name" value={project.name} maxLength={100} disabled={folderSaving} onChange={event => commitProject({ ...projectRef.current, name: event.target.value || 'Untitled project', updatedAt: new Date().toISOString() })} /></div></div>
+        <div className="eng-project-heading"><span className="eng-project-mark"><Code2 size={18} /></span><div><span className="eng-eyebrow">PROJECT / CODE</span><input aria-label="Project name" value={project.name} maxLength={100} disabled={folderSaving} onChange={event => commitProject({ ...projectRef.current, name: event.target.value || 'Untitled project', updatedAt: new Date().toISOString() })} /></div></div>
       <div className="eng-project-status" title={storageError || 'Project edits autosave in this browser. Use Save to PC to copy the source files into your connected folder.'}><span className={`eng-save-dot eng-save-${saveStatus}`} />{saveStatus === 'saving' ? 'Saving locally' : saveStatus === 'error' ? 'Download to keep work' : 'Saved in this browser'}</div>
       <div className="eng-project-actions">
         <button type="button" className="eng-button eng-command-trigger" title="Project commands (Ctrl / ⌘ K) · open files (Ctrl / ⌘ P)" aria-label="Open project commands" aria-haspopup="dialog" aria-expanded={Boolean(paletteMode)} onClick={() => setPaletteMode('all')}><Search size={14} /><span>Commands</span><kbd>Ctrl K</kbd></button>
         <button className="eng-button eng-icon-mobile" aria-label="Import folder" title="Import folder" onClick={() => folderInput.current?.click()} disabled={busy || executionBusy || folderSaving}><FolderOpen size={14} /><span>Import folder</span></button>
-        <button className="eng-button eng-icon-mobile" aria-label="Download ZIP" title="Download ZIP" onClick={() => downloadProject()}><Download size={14} /><span>Download ZIP</span></button>
-        <button className="eng-button eng-icon-mobile" aria-label="Save project to connected PC folder" title="Save project files to your connected PC folder" onClick={() => void saveProjectToFolder()} disabled={!projectFiles.length || busy || executionBusy || folderSaving}>{folderSaving ? <Loader2 className="eng-spin" size={14} /> : <FolderOpen size={14} />}<span>{folderSaving ? 'Saving…' : 'Save to PC'}</span></button>
-        <button className="eng-button eng-icon-mobile" aria-label="Save HTML to connected folder" title="Save HTML to connected PC folder" onClick={() => void saveProjectHtml()} disabled={!htmlEntries.length || busy || executionBusy || folderSaving}><FolderOpen size={14} /><span>Save HTML</span></button>
-        <button className="eng-button eng-icon-button" title="Start a new project" aria-label="Start a new project" onClick={() => setFileDialog('new')} disabled={busy || executionBusy || folderSaving}><Plus size={15} /></button>
+        <button className="eng-button eng-primary eng-icon-mobile eng-save-project" aria-label="Save project to connected PC folder" title="Save project files to your connected PC folder" onClick={() => void saveProjectToFolder()} disabled={!projectFiles.length || projectLocked}>{folderSaving ? <Loader2 className="eng-spin" size={14} /> : <FolderOpen size={14} />}<span>{folderSaving ? 'Saving…' : 'Save to PC'}</span></button>
+        <ProjectMenu dismiss={Boolean(paletteMode || fileDialog || commandApproval)} items={[
+          { id: 'new', label: 'New project', detail: 'Start fresh with an editable project', icon: Plus, disabled: projectLocked, onSelect: () => setFileDialog('new') },
+          { id: 'add', label: 'New source file', detail: 'Add a file to the current project', icon: FileCode2, disabled: folderSaving, onSelect: () => { setNewPath(''); setFileDialog('add'); } },
+          { id: 'import', label: 'Import source files', detail: 'Add files or update matching paths', icon: Upload, disabled: projectLocked, onSelect: () => fileInput.current?.click() },
+          { id: 'zip', label: 'Download ZIP', detail: `${projectFiles.length} accepted source files`, icon: Download, onSelect: downloadProject },
+          { id: 'html', label: 'Save HTML to PC', detail: 'Export an HTML entry to your folder', icon: FolderOpen, disabled: !htmlEntries.length || projectLocked, onSelect: () => void saveProjectHtml() },
+        ]} />
       </div>
     </header>
 
@@ -683,8 +714,8 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy || folderSaving}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }} disabled={folderSaving}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => { setSidebarOpen(false); explorerToggle.current?.focus(); }}><X size={14} /></button></div></div>
         <label className="eng-file-search"><Search size={13} aria-hidden="true" /><input ref={fileSearch} type="search" aria-label="Search project files" placeholder="Find a file…" value={fileQuery} onChange={event => setFileQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visibleFiles[0]) { event.preventDefault(); openFile(visibleFiles[0].path); } else if (event.key === 'Escape' && fileQuery) { event.preventDefault(); event.stopPropagation(); setFileQuery(''); } }} /></label>
         <div className="eng-file-tree">
-          <span className="eng-tree-root"><ChevronRight size={12} /> {project.name}</span>
-          {visibleFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} aria-current={activeFile?.path === file.path ? 'true' : undefined} onClick={() => openFile(file.path)} title={file.path}><FileCode2 size={13} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) && <span className="eng-file-change-dot" title="Proposed change" />}</button>)}
+          <span className="eng-tree-root"><ChevronDown size={12} /> {project.name}<small>{projectFiles.length}</small></span>
+          {visibleFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} aria-current={activeFile?.path === file.path ? 'true' : undefined} onClick={() => openFile(file.path)} title={file.path}><FileCode2 size={14} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) ? <span className="eng-file-change-dot" title="Proposed change" /> : <small className="eng-file-kind" aria-hidden="true">{sourceBadge(file.path)}</small>}</button>)}
           {projectFiles.length > 0 && !visibleFiles.length && <p className="eng-empty-tree" role="status">No matching files.<button className="eng-clear-search" onClick={() => { setFileQuery(''); fileSearch.current?.focus(); }}>Clear search</button></p>}
           {!projectFiles.length && <p className="eng-empty-tree">Your project has no files. Add a file or ask the agent to build one.</p>}
         </div>
@@ -741,13 +772,23 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
       </section>
 
       <aside className="eng-agent" aria-label="Vibe Coder">
-        <header className="eng-agent-heading"><div className="eng-agent-icon"><Sparkles size={19} /></div><div><h2>Vibe Coder</h2><span>From intent to working software</span></div><button aria-label="Configure engineering models" title="Configure models" onClick={onOpenSettings}><Settings2 size={15} /></button></header>
+        <header className="eng-agent-heading"><div className="eng-agent-icon"><Sparkles size={18} /></div><div><h2>Vibe Coder<span className={`eng-agent-state${busy ? ' is-running' : ''}`} title={busy ? 'Agent working' : providerReady ? 'Model configured' : 'Connect a model'} /></h2><span>{busy ? 'Working on your project' : pendingCount ? 'Your changes are ready to review' : 'Your coding partner'}</span></div><button aria-label="Configure engineering models" title="Configure models" onClick={onOpenSettings}><Settings2 size={15} /></button></header>
         <div className="eng-workflow" aria-label="Coding workflow">{['Plan', 'Build', 'Review', 'Preview'].map((step, index) => {
           const current = phase === 'planning' ? 0 : phase === 'implementing' ? 1 : phase === 'reviewing' || pendingCount ? 2 : tab === 'preview' ? 3 : phase === 'ready' ? 2 : -1;
           return <React.Fragment key={step}><span className={`${current === index ? 'eng-workflow-current' : current > index ? 'eng-workflow-done' : ''}`}><i>{current > index ? <Check size={9} /> : index + 1}</i>{step}</span>{index < 3 && <ChevronRight size={10} />}</React.Fragment>;
         })}</div>
         <div className="eng-agent-body" ref={activityList} onScroll={event => { const element = event.currentTarget; followActivity.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
-          {!activities.length && !plan.length && !explanation && <div className="eng-agent-welcome"><div className="eng-orbit"><Code2 size={28} /><i /><i /></div><span className="eng-eyebrow">LET’S BUILD SOMETHING</span><h3>Describe the idea.<br />Stay in control.</h3><p>Your agent reads real files, plans the work, and stages changes for you to review.</p><div className="eng-starter-goals">{['Build an interactive task board with drag and drop', 'Turn this starter into a polished portfolio', 'Review this project and fix its bugs'].map(suggestion => <button key={suggestion} onClick={() => { setGoal(suggestion); setGoalMode('build'); }}><ArrowRight size={12} /><span>{suggestion}</span></button>)}</div></div>}
+          {!activities.length && !plan.length && !explanation && <div className="eng-agent-welcome">
+            <span className="eng-welcome-kicker"><span /> A PLACE TO MAKE PROGRESS</span>
+            <h3>What are we<br /> building today?</h3><p>Start with an idea or an existing project. Your agent plans the work and proposes changes for your review.</p>
+            <div className="eng-starter-goals">
+              <button type="button" onClick={() => focusGoal('build', 'Add a useful feature to this project: ')}><Plus size={15} /><span><strong>Build a feature</strong><small>Turn an idea into working code</small></span><ArrowRight size={13} /></button>
+              <button type="button" onClick={() => focusGoal('build', 'Investigate this project and fix the following issue: ')}><Bug size={15} /><span><strong>Fix an issue</strong><small>Find the cause and propose a fix</small></span><ArrowRight size={13} /></button>
+              <button type="button" onClick={() => focusGoal('explain', activeFile ? `Explain how ${activeFile.path} works and how it fits into this project.` : 'Explain the structure of this project and suggest where to start.')}><BookOpen size={15} /><span><strong>Understand the code</strong><small>{activeFile ? `Explore ${activeFile.path.split('/').pop()}` : 'Explore your project'}</small></span><ArrowRight size={13} /></button>
+            </div>
+            {!providerReady && <button type="button" className="eng-connect-prompt" onClick={onOpenSettings}><Radio size={15} /><span><strong>Connect your first model</strong><small>Local AI or a provider you already use</small></span><ArrowRight size={13} /></button>}
+            <span className="eng-welcome-note"><ShieldCheck size={12} />You approve the edits before they’re applied.</span>
+          </div>}
           {plan.length > 0 && <div className="eng-plan"><div><Sparkles size={12} /><strong>Implementation plan</strong></div><ol>{plan.map((step, index) => <li key={index}><span>{index + 1}</span>{step}</li>)}</ol></div>}
           {activities.map(activity => <div key={activity.id} className={`eng-activity eng-activity-${activity.kind}`}><span className="eng-activity-symbol">{activity.kind === 'error' ? <AlertCircle size={12} /> : activity.kind === 'plan' ? <Sparkles size={12} /> : activity.kind === 'tool' ? <Code2 size={12} /> : <Circle size={8} />}</span><div><strong>{activity.title}</strong><p>{activity.detail}</p></div><time>{timeLabel(activity.timestamp)}</time></div>)}
           {explanation && <div className="eng-explanation"><span className="eng-eyebrow">PROJECT EXPLANATION</span><p>{explanation}</p></div>}
@@ -756,7 +797,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
         </div>
         {(model || phase) && <div className="eng-run-meta"><span className={`eng-phase-${phase ?? 'ready'}`}>{phase === 'ready' && explanation ? 'Explanation ready' : phase ? phaseLabel[phase] : 'Ready'}</span>{model && <span title={model}>{model}</span>}{tokens > 0 && <span>{tokens.toLocaleString()} tokens</span>}</div>}
         <form className="eng-composer" onSubmit={beginGoal}>
-          <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" disabled={busy} aria-pressed={goalMode === 'build'} className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" disabled={busy} aria-pressed={goalMode === 'explain'} className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}>Explain</button><span>{goalMode === 'build' ? (providers.find(provider => provider.id === chosenProviderId)?.localModel ? '24 local requests max · 20 min budget' : '12 requests max · 10 min budget') : 'Read only'}</span></div>
+          <div className="eng-composer-mode" role="group" aria-label="Agent task mode"><button type="button" disabled={busy} aria-pressed={goalMode === 'build'} className={goalMode === 'build' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('build')}><Code2 size={12} />Build</button><button type="button" disabled={busy} aria-pressed={goalMode === 'explain'} className={goalMode === 'explain' ? 'eng-mode-active' : ''} onClick={() => setGoalMode('explain')}><BookOpen size={12} />Explain</button><span title={goalMode === 'explain' ? 'Explains your code without changing files' : activeProvider?.localModel ? 'Up to 24 requests and 20 minutes per local run' : 'Up to 12 requests and 10 minutes per hosted run'}>{goalMode === 'explain' ? 'Read only' : activeProvider?.localModel ? 'On device' : 'Usage capped'}<ShieldCheck size={11} /></span></div>
           <textarea ref={goalInput} aria-label="Engineering goal" placeholder={goalMode === 'build' ? 'Describe what you want to build or fix…' : 'Ask about the selected file or project…'} value={goal} onChange={event => setGoal(event.target.value)} maxLength={AGENT_MAX_GOAL_CHARS} rows={3} disabled={busy || folderSaving} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
           <div className="eng-composer-hint"><span>Ctrl / ⌘ + Enter to submit</span><span aria-label={`${goal.length} of ${AGENT_MAX_GOAL_CHARS} characters`}>{goal.length.toLocaleString()} / {AGENT_MAX_GOAL_CHARS.toLocaleString()}</span></div>
           {!providerReady && !exportRequest && <div className="eng-provider-required"><span>Connect a model to use Build or Explain.</span><button type="button" onClick={onOpenSettings}>Open Settings<ArrowRight size={11} /></button></div>}

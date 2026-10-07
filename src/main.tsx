@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import "./components/canvas/settings.css";
+import "./studio.css";
 import { applyAppearance, loadAppearance } from "./utils/appearance";
 
 applyAppearance(loadAppearance());

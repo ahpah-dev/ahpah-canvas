@@ -43,7 +43,11 @@ export function MissionControl({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<'all' | 'agents' | 'tools' | 'review'>('all');
   const agents = cards.filter((card) => card.type === "agent");
-  const matchesSearch = cards.filter((card) => `${cardName(card)} ${card.title} ${card.type === 'agent' ? getAgentIdentity(card).role : ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matchesSearch = cards.filter(card => {
+    const text = `${cardName(card)} ${card.title} ${card.type} ${card.providerName ?? ''} ${card.agentType ?? ''} ${card.routedModel ?? ''} ${statusName(card)} ${card.type === 'agent' ? getAgentIdentity(card).role : ''}`.toLowerCase();
+    return terms.every(term => text.includes(term));
+  });
   const filtered = matchesSearch.filter(card => filter === 'all' || (filter === 'agents' && card.type === 'agent') || (filter === 'tools' && card.type !== 'agent') || (filter === 'review' && (card.status === 'error' || card.status === 'approval_required')));
   const needsReview = cards.filter(card => card.status === 'error' || card.status === 'approval_required').length;
   const active = agents.filter(isBusy).length;
@@ -94,7 +98,11 @@ export function MissionControl({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Find a card…"
+              onKeyDown={event => {
+                if (event.key === 'Enter' && filtered[0]) { event.preventDefault(); onFocusCard(filtered[0].id); }
+                if (event.key === 'Escape') { event.preventDefault(); setSearch(''); }
+              }}
+              placeholder="Find agents, models, tools…"
               aria-label="Find a canvas card"
             />
             {search && <button aria-label="Clear card search" onClick={() => setSearch('')}><span aria-hidden="true">×</span></button>}

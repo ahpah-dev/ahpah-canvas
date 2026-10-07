@@ -5,6 +5,7 @@ import {
   Plug, Radio, RotateCcw, Search, ShieldCheck, Sparkles, Sun, Terminal, Laptop, Layers3,
 } from "lucide-react";
 import "./landing.css";
+import "./studioLanding.css";
 
 interface LandingPageProps {
   onLaunchCode: () => void;
@@ -198,30 +199,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
   };
 
   return (
-    <div className="lp-page lp-matte" ref={pageRef}>
+    <div className="lp-page lp-matte lp-studio" ref={pageRef}>
       <div>
         <section className="lp-hero">
           <div className="lp-hero-grid" aria-hidden="true" /><div className="lp-hero-light" aria-hidden="true" /><div className="lp-hero-orbits" aria-hidden="true"><i /><i /><i /><span className="lp-orbit-point"><Code2 size={17} /></span><span className="lp-orbit-point cyan"><Sparkles size={15} /></span></div>
           <div className="lp-hero-copy lp-container">
             <div className="lp-hero-message">
-              <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><Code2 size={12} /> OPEN SOURCE. BUILT FOR BUILDING.</span><ArrowRight size={12} /></button>
-              <h1 className="lp-enter lp-enter-1">Build software.<br /><span>Keep your flow.</span></h1>
-              <p className="lp-enter lp-enter-2">Your files, your agents, your next great idea.<br /> An engineering workspace that keeps the whole change in view.</p>
-              <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Open workspace <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>See how it works <ArrowDown size={15} /></a></div>
-              <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> MIT licensed</span><span><Check size={12} /> Real project files</span><span><Check size={12} /> You review the changes</span></div>
+              <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><span className="lp-studio-dot" /> THE OPEN SOURCE ENGINEERING STUDIO</span><ArrowRight size={12} /></button>
+              <h1 className="lp-enter lp-enter-1">Make your<br />next <span>big thing.</span></h1>
+              <p className="lp-enter lp-enter-2">An idea deserves more than a conversation.<br />Build with agents, work with real files, and own every change.</p>
+              <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Start building <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>See workspace <ArrowDown size={15} /></a></div>
+              <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> Free &amp; MIT licensed</span><span><Check size={12} /> Your models</span><span><Check size={12} /> Your final say</span></div>
             </div>
             <aside className="lp-start-panel lp-enter lp-enter-2" aria-label="Choose your starting point">
-              <span className="lp-start-label">A CLEAR NEXT STEP</span><h2>Make room for<br /> your best work.</h2>
-              <button onClick={onLaunchCode}><Code2 size={19} /><span><strong>Build in Code</strong><small>Files, agent tasks, diffs, and previews</small></span><ArrowUpRight size={16} /></button>
-              <button onClick={onLaunchCanvas}><Layers3 size={19} /><span><strong>Think in Canvas</strong><small>Named agents and connected project context</small></span><ArrowUpRight size={16} /></button>
-              <button onClick={onOpenOneClickSetup}><Laptop size={19} /><span><strong>Choose your models</strong><small>Run locally or connect a hosted provider</small></span><ArrowUpRight size={16} /></button>
-              <p><ShieldCheck size={13} /> A free workspace. Your choice of intelligence.</p>
+              <div className="lp-studio-panel-top"><span className="lp-start-label">YOUR WORK, IN ONE PLACE</span><span>01 — 03</span></div>
+              <h2>Less friction.<br />More forward.</h2>
+              <button onClick={onLaunchCode}><span className="lp-start-index">01</span><Code2 size={19} /><span><strong>A focused Code workspace</strong><small>Write, review, preview, and save to your PC</small></span><ArrowUpRight size={16} /></button>
+              <button onClick={onLaunchCanvas}><span className="lp-start-index">02</span><Layers3 size={19} /><span><strong>Room to think in Canvas</strong><small>Your agents, decisions, and project context</small></span><ArrowUpRight size={16} /></button>
+              <button onClick={onOpenOneClickSetup}><span className="lp-start-index">03</span><Laptop size={19} /><span><strong>Intelligence on your terms</strong><small>Local models, Codex, gateways, and your API</small></span><ArrowUpRight size={16} /></button>
+              <p><ShieldCheck size={13} /> Source stays yours. You approve the changes.</p>
             </aside>
           </div>
-          <div className="lp-container lp-enter lp-enter-4"><EngineeringShowcase onLaunch={onLaunchCode} workspaceDrop={workspaceDrop} onWorkspaceDropEnd={() => setWorkspaceDrop(false)} /></div>
+          <div className="lp-container lp-enter lp-enter-4"><div className="lp-studio-showcase-heading"><span>THE WORKSPACE</span><p>From intent to implementation.<span>Everything in view.</span></p><ArrowDown size={18} /></div><EngineeringShowcase onLaunch={onLaunchCode} workspaceDrop={workspaceDrop} onWorkspaceDropEnd={() => setWorkspaceDrop(false)} /></div>
         </section>
 
-        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>BUILT AROUND<br /><strong>YOUR MODELS.</strong></span><div><Laptop size={20} /> Local Ollama</div><div><Code2 size={20} /> Codex</div><div><Radio size={20} /> OmniRoute</div><div><Sparkles size={20} /> Kilo</div><div><Plug size={20} /> Custom APIs</div></section>
+        <section className="lp-provider-strip lp-container lp-reveal" aria-label="Supported providers"><span>ONE WORKSPACE.<br /><strong>YOUR CHOICE OF MODEL.</strong></span><div><Laptop size={18} /> Local Ollama</div><div><Code2 size={18} /> Codex</div><div><Radio size={18} /> OmniRoute</div><div><Sparkles size={18} /> Kilo</div><div><Plug size={18} /> Custom APIs</div></section>
 
         <section className="lp-model-paths lp-container" aria-labelledby="lp-model-paths-heading">
           <header className="lp-reveal"><span className="lp-eyebrow">A FREE APP. TWO WAYS TO RUN YOUR MODELS.</span><h2 id="lp-model-paths-heading">Start on your terms.</h2><p>AhPah Canvas is open source and free to use. Model access depends on where you run it.</p></header>

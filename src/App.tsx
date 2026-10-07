@@ -186,6 +186,11 @@ export function App() {
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [isWorkspacesOpen, setIsWorkspacesOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsConnectionTarget, setSettingsConnectionTarget] = useState<'local' | 'hosted'>();
+  const openSettings = (target?: 'local' | 'hosted') => {
+    setSettingsConnectionTarget(target);
+    setIsSettingsOpen(true);
+  };
   const [isOneClickSetupOpen, setIsOneClickSetupOpen] = useState(false);
   const [isSimulated, setIsSimulated] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -323,12 +328,10 @@ export function App() {
     if (selectedCardId === id) setSelectedCardId(null);
   };
 
-  // 1-Click Free Setup Application
+  // The guide opens the user's existing canvas.
   const handleApplyOneClickSetup = () => {
     setCurrentView("canvas");
     setIsOneClickSetupOpen(false);
-    if (loadAppearance().motion === "smooth")
-      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, disableForReducedMotion: true });
   };
 
   // Add Card
@@ -885,7 +888,7 @@ export function App() {
         onSwitchView={setCurrentView}
         onOpenMemory={() => setIsMemoryOpen(true)}
         onOpenWorkspaces={() => setIsWorkspacesOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => openSettings()}
         onOpenOneClickSetup={() => setIsOneClickSetupOpen(true)}
         memoryCount={memory.length}
         activeAgentsCount={activeAgentsCount}
@@ -911,7 +914,7 @@ export function App() {
               send={sendEngineeringStep}
               providers={codingProviders}
               localExecution={supportsLocalBridge()}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => openSettings()}
             />
           </React.Suspense>
         ) : (
@@ -944,7 +947,7 @@ export function App() {
                 onApprovePlan={handleApprovePlan}
                 onSpawnWorker={handleSpawnWorker}
                 onStopPrompt={handleStopPrompt}
-                onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenSettings={() => openSettings()}
                 onOpenCode={cardId => { setCanvasCardToOpen(cardId); setCanvasProjectToOpen(cardId ? loadCanvasProject(cardId) ?? undefined : undefined); setCurrentView("code"); }}
                 isSimulated={isSimulated}
               />
@@ -963,7 +966,7 @@ export function App() {
       <OneClickSetupModal
         isOpen={isOneClickSetupOpen}
         onClose={() => setIsOneClickSetupOpen(false)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={openSettings}
         onLaunchCode={() => { setCurrentView('code'); setIsOneClickSetupOpen(false); }}
         onApplyOneClickSetup={handleApplyOneClickSetup}
       />
@@ -999,6 +1002,7 @@ export function App() {
       />
 
       <SettingsModal
+        connectionTarget={settingsConnectionTarget}
         onConnectLocal={() => { setCurrentView('code'); setIsSettingsOpen(false); }}
         onConnectOmniRoute={() => {
           const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === 'omniroute')?.id || handleAddCard('agent', 'omniroute');
@@ -1028,7 +1032,7 @@ export function App() {
           if (ids[0]) focusCard(ids[0]);
         }}
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => { setIsSettingsOpen(false); setSettingsConnectionTarget(undefined); }}
         isSimulated={isSimulated}
         onToggleSimulated={setIsSimulated}
       />

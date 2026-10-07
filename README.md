@@ -16,7 +16,8 @@ An open source agentic coding workspace with real project files, a syntax highli
 - **Code, Changes, Preview, and Terminal** panels. Review individual files or an entire change set, preserve manual edits through conflict checks, discard proposals, and undo accepted changes.
 - An isolated HTML/CSS/JavaScript preview with desktop/mobile views, entry selection, reload, missing-resource diagnostics, and captured runtime errors.
 - Supported Node/npm commands with explicit approval, real output, review of generated files, and compiled previews after a supported build.
-- A keyboard command palette for files and project actions, plus a compact provider/model picker anchored beside the task composer.
+- A keyboard command palette for files and project actions, plus a compact, searchable provider/model picker anchored beside the task composer. Search model IDs, provider names, or local/hosted routes and select with the keyboard.
+- **Build a feature, Fix an issue, and Understand the code** task starters prepare an editable prompt without sending a model request. A compact project menu groups new-file, import, ZIP, and HTML actions while keeping **Save to PC** visible.
 
 ### Canvas: project context and specialized agents
 
@@ -26,6 +27,7 @@ An open source agentic coding workspace with real project files, a syntax highli
 - Automatic recovery of saved coding runs after a page refresh, preserving the goal, source checkpoint, agent identity, and consumed request budget.
 - Notes with persistent checkboxes, embedded website previews, saved command snippets, workspace import/export, and browser-local persistence.
 - A bottom command bar for typed prompts and optional voice dispatch in browsers with speech recognition support.
+- A searchable **Add card** menu for coding agents, configured models, notes, previews, and command tools. Mission Control searches names, roles, providers, model IDs, and statuses; press Enter to focus a matching card.
 
 ### Your computer: real files and automatic delivery
 
@@ -47,10 +49,11 @@ An open source agentic coding workspace with real project files, a syntax highli
 
 ### Interface, accessibility, and performance
 
-- A refreshed editorial landing page and cohesive matte materials across Code and Canvas, with clearer typography, controls, and workspace navigation.
+- A redesigned studio landing page with an editorial hero, interactive engineering showcase, and direct Code, Canvas, and setup entry points. Neutral materials, stronger typography, and quieter controls carry across the workspaces while preserving Code’s explorer/editor/agent layout.
 - A smooth workspace reveal on the landing page, restrained button/dialog feedback, responsive panels, and visible focus states.
 - **Midnight, Graphite, and Daylight** themes, custom accents, dots/lines/no grid, and **Smooth, Subtle, or No animations** motion preferences that respect reduced-motion settings.
-- An in-workspace **Guide**, starter projects, keyboard navigation, and useful empty states for first-time setup.
+- **Quick start** takes you directly to local-model or hosted-provider setup. Settings includes shortcuts to Local AI, Codex, OmniRoute, Kilo, and custom APIs, with **Save changes** and **Close** always visible while connection settings scroll.
+- Starter projects, keyboard navigation, useful empty states, compact task controls on shorter windows, and automatic dark/light button text for custom accents.
 - Canvas gestures batched once per animation frame, memoized conversations, buffered workspace saves, and streaming scroll that lets you read earlier messages.
 
 ## Choose how to run
@@ -91,7 +94,7 @@ npm run build
 npm run preview
 ```
 
-Use **Guide** in the workspace top bar for the model → project → build walkthrough. **Settings → Local AI** detects Ollama first. **Settings → Hosted & custom providers → One-click OmniRoute setup** can install and start OmniRoute locally.
+Use **Quick start** in the workspace top bar for the model → project → build walkthrough. Its local and hosted choices open the appropriate Settings section. Use the provider shortcuts at the top of **Settings → Connections** to reach Local AI, Codex, OmniRoute, Kilo, or your custom API. The OmniRoute shortcut opens its one-click installation and connection controls.
 
 ### Free coding without hosted API quotas
 
