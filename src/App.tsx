@@ -38,6 +38,7 @@ import { loadCanvasProject, projectForCanvas, runCanvasAgent, saveCanvasProject 
 import { clearCanvasRunCheckpoint, listCanvasRunCheckpoints, saveCanvasRunCheckpoint } from './utils/canvasRunCheckpoint';
 import type { CanvasRunCheckpoint } from './utils/canvasRunCheckpoint';
 import { getAgentIdentity, nextAgentName } from './utils/agentIdentity';
+import type { CanvasControlCommand } from './utils/canvasCommands';
 import type { EngineeringProject } from './types/engineering';
 import { validateEngineeringProject, projectByteSize } from './utils/projectFiles';
 
@@ -747,6 +748,19 @@ export function App() {
       });
   };
 
+  const handleCanvasCommand = (command: CanvasControlCommand): string => {
+    if (command.kind === 'settings') { openSettings(); return 'Opened model connections. No model request was sent.'; }
+    if (command.kind === 'focus') {
+      if (!cardsRef.current.some(card => card.id === command.cardId)) return 'That card is no longer on the canvas. Choose another target.';
+      focusCard(command.cardId);
+      return `${command.label}. No model request was sent.`;
+    }
+    if (command.agentType === 'custom' && !loadGatewayConfig().customProviders?.some(provider => provider.id === command.providerId)) return 'That provider is no longer configured. Open Settings to connect it again.';
+    const id = handleAddCard(command.cardType, command.agentType, undefined, command.providerId);
+    const card = cardsRef.current.find(item => item.id === id);
+    return `${command.cardType === 'agent' && card ? `Opened ${getAgentIdentity(card).name}` : command.label}. No model request was sent.`;
+  };
+
   const handleVoiceDispatch = (event: VoiceDispatchEvent) => {
     if (event.action === "setup") {
       setIsSettingsOpen(true);
@@ -953,9 +967,11 @@ export function App() {
               />
               <VoiceBar
                 cards={cards}
+                providers={codingProviders}
                 selectedCardId={selectedCardId}
                 onDispatch={handleVoiceDispatch}
                 onDirectPrompt={handleExecutePrompt}
+                onCommand={handleCanvasCommand}
               />
             </div>
           </div>

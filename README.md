@@ -28,6 +28,22 @@ An open source agentic coding workspace with real project files, a syntax highli
 - Notes with persistent checkboxes, embedded website previews, saved command snippets, workspace import/export, and browser-local persistence.
 - A bottom command bar for typed prompts and optional voice dispatch in browsers with speech recognition support.
 - A searchable **Add card** menu for coding agents, configured models, notes, previews, and command tools. Mission Control searches names, roles, providers, model IDs, and statuses; press Enter to focus a matching card.
+- **Canvas commands** launch cards, focus named agents, and route tasks with `@Agent Name`. Type or dictate a command, review its action preview, then submit. Opening/focusing cards costs no model tokens; named tasks go to one agent and retain its request limits.
+
+#### Direct your canvas by name
+
+Open **Canvas → Commands** or press **Ctrl / ⌘ K**. The menu uses your configured provider routes and current agent names:
+
+| Command | Action |
+| --- | --- |
+| `/open Codex` or `open Kilo` | Create and focus an idle coding agent. Connect its model in Settings if needed. |
+| `/open preview`, `/open notes`, `/open terminal` | Add a browser preview, project note, or command scratchpad. |
+| `/focus Mary` | Focus a card named Mary without starting a run. |
+| `@Mary Fix the API response handling` | Send that task to Mary only, after you submit. |
+| `tell Mary to Review App.tsx` | Address a named agent while preserving the original task text. |
+| `/settings` | Open model connections. |
+
+Menu buttons prepare commands without executing them. Unknown or ambiguous `@` names are blocked; requests are not silently sent to a different agent. Dictation requires browser speech-recognition support and microphone permission, and never submits automatically. Typing works without speech recognition.
 
 ### Your computer: real files and automatic delivery
 
