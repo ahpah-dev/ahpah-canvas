@@ -4,29 +4,68 @@ An open source agentic coding workspace with real project files, a syntax highli
 
 [Open the live site](https://ahpah-dev.github.io/ahpah-canvas/) · [Source on GitHub](https://github.com/ahpah-dev/ahpah-canvas) · [MIT license](LICENSE)
 
+[Quick start](#start-locally) · [Coding workflow](#build-a-project) · [Canvas and PC saving](#canvas-coding-and-automatic-pc-saving) · [Providers](#connect-a-provider) · [Appearance and shortcuts](#appearance-and-keyboard-controls)
+
 ## Features
 
-- A persistent project explorer and editor. Start with HTML/CSS/JavaScript files, import your own text source files, and download the finished project as a ZIP.
-- A command palette for project files and workspace actions, file filtering, and editor Find/Replace with literal matching, case control, navigation, and undoable replacements.
-- First-class local AI setup: detect actual installed Ollama models, install/start the official runtime on Windows when requested, and download a chosen local model with progress and cancellation. No models download automatically.
-- An editorial landing page, cohesive matte Code/Canvas materials, accessible keyboard controls, and an in-workspace getting started guide.
-- A connected PC folder shared by Canvas and Code. Export requests write real HTML files there, including local project CSS and JavaScript, with actual save results and a previous-version backup.
-- A real coding agent loop that plans a goal, lists and reads files, searches source, and stages file edits or deletions. Tool activity shows what actually happened.
-- File changes remain pending until you review and apply them. Accept individual files or a complete set, detect conflicts with your own edits, and undo applied changes.
-- An isolated browser preview for supported HTML/CSS/JavaScript projects, with missing-resource diagnostics and captured runtime errors.
-- Explicitly approved Node and npm commands in the local app, real output, generated-file review, and compiled previews after a supported build.
-- Live provider catalogs, searchable model selection, and free or paid labels. Model IDs come from the connected provider rather than a bundled mock list.
-- Codex in Code and Canvas through your ChatGPT subscription, with one-click local connection, live model selection, and native workspace tool calls.
-- Named custom API profiles with a base URL, optional API key, selected model, and streaming preference.
-- Canvas coding agents with real list/read/search/write/patch tools, visible action results, persistent source projects, cancellation, and automatic PC delivery after source review.
-- Kilo Auto Free recovery that checks the live catalog and uses verified free routes when a route stalls or returns an empty answer.
-- Kilo coding compatibility checks, consistent free routing during each agent run, and automatic recovery from repeated actions without discarding staged source.
-- An infinite canvas with drag, resize, pan, zoom, minimap, card arrangement, and shared project memory.
-- Named Canvas agents with software engineering, interface design, backend, planning, review, and custom specializations. Saved roles and working instructions guide actual agent runs.
-- Notes, embedded previews, saved command snippets, workspace import and export, and browser-local persistence.
-- Midnight, Graphite, and Daylight themes, custom accents, grid styles, and motion preferences that respect reduced-motion settings.
-- A coding-focused landing page, clear Code/Canvas navigation, and restrained feedback and motion.
+### Code: build, inspect, review, preview
+
+- A persistent project explorer with file filtering, source-folder/file imports, and ZIP downloads of accepted or proposed source.
+- A syntax highlighted editor with line numbers, language and cursor status, two-space indentation, browser autosave, and literal Find/Replace with case matching, match navigation, and undoable replacements.
+- **Build** mode for agentic implementation and **Explain** mode for read-only project questions. Vibe Coder plans, inspects real files, searches source, and proposes changes with visible activity and usage.
+- **Code, Changes, Preview, and Terminal** panels. Review individual files or an entire change set, preserve manual edits through conflict checks, discard proposals, and undo accepted changes.
+- An isolated HTML/CSS/JavaScript preview with desktop/mobile views, entry selection, reload, missing-resource diagnostics, and captured runtime errors.
+- Supported Node/npm commands with explicit approval, real output, review of generated files, and compiled previews after a supported build.
+- A keyboard command palette for files and project actions, plus a compact provider/model picker anchored beside the task composer.
+
+### Canvas: project context and specialized agents
+
+- An infinite workspace with drag, resize, pan, zoom, a minimap, card arrangement, Mission Control, linked cards, and shared project memory.
+- Agent names, saved working instructions, and **Software engineer, Interface designer, Backend engineer, Project planner, Code reviewer, and Custom specialist** roles that guide actual coding runs.
+- A separate persistent source project per agent card, visible file/tool results, source inspection, and **Open in Code** to continue with the editor.
+- Automatic recovery of saved coding runs after a page refresh, preserving the goal, source checkpoint, agent identity, and consumed request budget.
+- Notes with persistent checkboxes, embedded website previews, saved command snippets, workspace import/export, and browser-local persistence.
+- A bottom command bar for typed prompts and optional voice dispatch in browsers with speech recognition support.
+
+### Your computer: real files and automatic delivery
+
+- A connected PC folder shared by Code and Canvas, with a remembered directory handle and reconnection controls.
+- Canvas source automatically delivered after a successful source review; **Save to PC** copies accepted Code files into a separate project folder.
+- HTML export that bundles local CSS/JavaScript into a single real file, including requests such as **Export the game "HATE" to my PC as HTML**.
+- A persistent save queue for disconnected folders, pending-path visibility, retry/clear controls, conflict protection, and previous versions in **`.ahpah-backups/`**.
+
+### Models: local AI, Codex, gateways, and custom APIs
+
+- Local Ollama setup that detects actual installed models, installs/starts the official Windows runtime when requested, and downloads explicitly chosen models with progress and cancellation.
+- Codex in **Code**, **Canvas**, and **Add card**, with one-click local ChatGPT connection, live model selection, and native workspace tool calls.
+- One-click OmniRoute installation, startup, connection, live catalog loading, and coding compatibility checks of eligible free routes.
+- Live model search by name, ID, and provider; free/paid/unverified filters; current catalog ordering; and exact model-ID import when discovery does not list a selection.
+- Kilo Auto Free routing with live zero-price evidence, bounded recovery, advertised instant/low-reasoning variants, and preservation of source and tool results when a route fails or repeats work.
+- Named OpenAI compatible API profiles with a base URL, optional API key, chosen model, and streaming preference.
+- Local-model context limits, small source sections, checked appends, safe cutoff continuation, compatible native-call conversion, and capped response-format repair.
+- Shared request budgets, cancellation, loop detection, and opt-in hosted automatic setup to limit unnecessary inference requests.
+
+### Interface, accessibility, and performance
+
+- A refreshed editorial landing page and cohesive matte materials across Code and Canvas, with clearer typography, controls, and workspace navigation.
+- A smooth workspace reveal on the landing page, restrained button/dialog feedback, responsive panels, and visible focus states.
+- **Midnight, Graphite, and Daylight** themes, custom accents, dots/lines/no grid, and **Smooth, Subtle, or No animations** motion preferences that respect reduced-motion settings.
+- An in-workspace **Guide**, starter projects, keyboard navigation, and useful empty states for first-time setup.
 - Canvas gestures batched once per animation frame, memoized conversations, buffered workspace saves, and streaming scroll that lets you read earlier messages.
+
+## Choose how to run
+
+| Connection or capability | Local app | GitHub Pages |
+| --- | --- | --- |
+| Editing, source review, HTML previews, ZIP downloads | Yes | Yes |
+| Connected PC folder and queued delivery | Supported desktop browsers | Supported desktop browsers |
+| Local Ollama setup and inference | Yes | Requires the local app |
+| Codex with ChatGPT sign-in | Yes | Requires the local app |
+| Kilo AI Gateway | Yes, through the included bridge | Requires the local app |
+| OmniRoute or custom compatible APIs | Yes | HTTPS endpoints with browser CORS support |
+| Approved Node/npm execution and compiled previews | Yes | Requires the local app |
+
+The workspace is free and MIT licensed. Local inference has no hosted API quota; hardware capacity, runtime context, and bounded agent runs still apply. Hosted providers and ChatGPT subscriptions retain their own prices, access rules, and limits.
 
 ## Start locally
 
@@ -64,11 +103,11 @@ Use **Guide** in the workspace top bar for the model → project → build walkt
 
 The app and Ollama runtime are free; model license terms still apply. Local inference has no hosted request/token quota or per-token bill. Available RAM/VRAM, electricity, model quality, and processing speed determine what your PC can run. Cloud/remote Ollama tags are excluded from this setup. The agent still uses bounded runs and file review to prevent loops; a stopped run retains staged work for review and continuation.
 
-Local coding uses compact context and source sections of up to 4,000 characters to leave room in a 16K runtime context. Larger JavaScript/CSS files can be extended with checked append offsets; requested HTML exports still bundle local assets. A response cutoff keeps only complete validated actions and asks for a smaller section, with at most two consecutive unsuccessful recoveries. Local runs allow up to 24 requests / 20 minutes for these smaller sections; hosted runs retain their 12-request / 10-minute budget. Stop cancels either. Partial reads carry their actual character ranges and do not count as a completed source review.
+Local coding uses compact context and small source sections to leave room in the runtime's context window. Larger JavaScript/CSS files can be extended with checked append offsets; requested HTML exports still bundle local assets. A cutoff preserves complete validated actions and asks for a smaller section. See [Request limits and recovery](#request-limits-and-recovery) for the current budgets and safeguards.
 
 Ollama coding requests explicitly use JSON output with native tool calling disabled. Compatible native replies still pass through workspace validation, including object arguments and standard namespaced/camelCase tool names. An unsupported local tool batch executes nothing and can be corrected at most twice within the same run budget; the error identifies the unsupported name.
 
-[Qwen3.5 4B](https://ollama.com/library/qwen3.5:4b) is a compact download of about 3.4 GB; [Qwen3.6 27B](https://ollama.com/library/qwen3.6:27b) is an advanced coding option of about 19 GB. Model weights need additional memory during use. These are explicit download suggestions, not fabricated installed entries. The picker lists only models actually returned by your local runtime.
+Choose a model that fits your PC's RAM/VRAM, allowing additional memory beyond the model weights. Consult [Ollama's model library](https://ollama.com/library) for current downloads and model details. Download suggestions are separate from installed-model entries; the picker lists only models actually returned by your local runtime.
 
 The GitHub Pages site serves the browser app; it cannot install software or run local HTTP inference on your PC. Its settings link to the local setup instructions. Hosted APIs, Kilo routes, and Codex subscriptions keep their provider/account limits. Nothing in AhPah bypasses them. Hosted auto setup is opt-in on new installations, and opening settings does not spend hosted inference quota by default.
 
@@ -90,6 +129,8 @@ Native shell/app tools are disabled, and coding threads use read-only sessions i
 4. Review the proposed changes. Apply the files you want, keep your manual edits when a conflict is detected, or discard a proposal. **Undo** restores an applied change when the current files still match it.
 5. Open **Preview** to inspect the project. Download a ZIP when you want to continue in another editor.
 
+Use **Build** when you want source changes and **Explain** when you want an answer about the existing project without editing it. The composer shows the configured model for the next run and the applicable request/time budget. The **Commands** palette opens files, Find/Replace, provider settings, preview, and other workspace actions.
+
 The Code workspace saves edits in this browser. Use **Save to PC** to copy the current project into `code/<project-name>-<id>/` under your connected folder. If no folder is connected yet, the files stay queued on this device and save when you connect one. Unreviewed agent changes are excluded. Existing PC files that AhPah has not saved before are preserved and reported as conflicts.
 
 The agent operates on the project files held by this workspace. It can list, read, search, write, replace text, and delete files through validated app tools. Writes and deletions are staged for review. A run has a bounded iteration count and deadline; **Stop** cancels the model request and preserves work already staged.
@@ -104,6 +145,14 @@ Open **Connect folder** in the workspace's top bar, choose a local folder, and g
 
 Canvas now runs a bounded engineering tool loop. Describe the app, game, feature, or fix directly in an agent card. The agent plans, inspects files, writes or patches actual source, reads its changes for review, and finishes with an implementation summary. Tool results come from the application. Invalid actions and unresolved tool failures are fed back to the model; incomplete runs keep partial source for continuation without automatically delivering it to the PC. Coding questions can finish without changing files.
 
+### Refresh recovery
+
+Active Canvas coding runs save their goal, agent identity, source project, and consumed request count in IndexedDB. After a refresh, eligible checkpoints resume automatically for cards still in the workspace. Saved request counts carry over, so a reload does not grant a fresh request budget. Checkpoints expire after 24 hours; **Stop** ends the run and keeps prepared source.
+
+Recovery runs while the app is open. A refresh may interrupt the current provider request; the app continues from the last saved source checkpoint rather than claiming that an unfinished response executed. Closing the browser does not create a background worker. This recovery applies to Canvas coding runs; Code retains its saved project and proposed changes.
+
+### Folder delivery and HTML export
+
 Completed source projects automatically save under **`canvas/<project-id>/`** in your connected folder. Each card owns a separate project so parallel agents do not overwrite one another. HTML, CSS, JavaScript, Python, TypeScript, and other supported text source can be delivered. Open **Project files** in a card to inspect actual contents, or choose **Open in Code** to import the project into the editor after preserving your current Code project. Accepted or manual Code edits to that Canvas project also sync automatically. PC files deleted from the editor are retained on disk; Canvas does not automatically delete PC files.
 
 If no folder is connected or permission has expired, ready source waits in IndexedDB on this device and saves when you choose or reconnect a folder. The queue survives reloads and disconnects, supports up to **210 files / 24 MB**, and shows pending paths in the folder panel. Newer queued content replaces older content at the same path. Use **Retry saving** after resolving a file conflict, or **Clear queue** to cancel pending delivery; source projects remain available. Saying not to save disables automatic saving for that run.
@@ -116,9 +165,35 @@ The app reports a PC save only after the writer closes successfully. General sou
 
 ### Tool calling
 
-Codex uses native workspace tool calls; other connected text providers use a validated JSON action protocol. Available coding tools include `plan`, `list_files`, `read_file` (with line ranges), `search_files`, `write_file`, `replace_in_file`, and `finish`. Canvas also supports `save_files` to prepare delivery and `export_html` for requested HTML exports. Source writes happen after successful source review; queued delivery is reported distinctly from a confirmed PC save. Canvas prevents automatic PC deletion. `run_command` queues an exact command for review in Code and never approves or executes it by itself.
+Codex uses native workspace tool calls. OmniRoute and supported Kilo routes can return native calls that are converted into the same validated project actions. Ollama coding explicitly requests JSON actions, with compatibility handling for native replies. Custom text providers use the JSON action protocol.
 
-Runs allow up to **20 steps**, **8 actions per response**, and **10 minutes**. Unknown tools, invalid paths, ambiguous replacements, incomplete model JSON, cancellation, and folder failures produce real errors. Model reliability and provider availability still determine whether a run can complete; the app does not claim runtime verification without actual command output.
+| Action | Purpose |
+| --- | --- |
+| `plan` | Set a concrete implementation plan. |
+| `list_files`, `search_files` | Inspect the real project manifest or search literal source text. |
+| `read_file` | Read actual source with line ranges; local JSON coding also supports character ranges for long/minified lines. |
+| `write_file`, `replace_in_file` | Prepare complete files or unique exact replacements while protecting existing work. |
+| `append_to_file` | Add a small source section using the actual current character count; local coding uses this to build larger files without repeating earlier sections. |
+| `delete_file` | Stage a deletion for review in Code; Canvas prevents automatic PC deletion. |
+| `run_command` | Queue a supported command for explicit approval in Code. |
+| `save_files` | Validate reviewed Canvas source for delivery; it does not itself confirm a PC write. |
+| `export_html` | Bundle and save a complete HTML project when the user requests an export. |
+| `finish` | Summarize actual work and source review, and complete eligible Canvas delivery. |
+
+Code source changes stay proposed until accepted. Canvas source is delivered only after successful review; queued delivery is reported separately from a confirmed PC save. A command proposal never approves or executes itself.
+
+### Request limits and recovery
+
+| Run | Request/step ceiling | Run deadline | Actions per response |
+| --- | --- | --- | --- |
+| Hosted providers and Codex | 12 | 10 minutes | 8 |
+| Local Ollama coding | 24 | 20 minutes | 8 |
+
+Provider attempts and format repairs count toward the shared request budget. Hosted completions have a three-minute deadline; an individual local Ollama completion can take up to ten minutes within the run deadline. The composer shows the applicable budget, and **Stop** cancels the current request while preserving prepared source. Switching a profile to a hosted endpoint cannot inherit the larger local request allowance.
+
+Local coding uses an 11,000-byte context budget, a maximum 4,096-token response budget, and source sections of up to 4,000 characters. Complete validated actions can survive an output/context cutoff; incomplete arguments and truncated writes are discarded. Consecutive cutoffs without progress and response-format correction are each capped at two recovery attempts. Partial reads expose continuation offsets and cannot count as a completed source review.
+
+Repeated plans, unchanged rewrites, redundant inspections, and source cycles are detected. Eligible free routing can make one run-local switch after repeated actions without progress; a continuing loop stops and keeps prepared source. Unknown tools, invalid paths, ambiguous replacements, malformed model output, cancellation, and folder failures remain real errors. The app does not claim runtime verification without actual command output.
 
 ### Preview and local commands
 
@@ -142,6 +217,8 @@ Enter your gateway's OpenAI compatible base URL, such as `http://localhost:20128
 
 Setup checks up to six current free text routes, trying different providers first and skipping a provider's other models when its credentials or quota are unavailable. It excludes virtual routers, paid models and retired models. **Load live models** refreshes the catalog; it does not claim that every listed provider works. Exact model IDs can be imported manually and stay selected when the catalog is refreshed. Automatic configuration preserves explicitly selected paid or price-unverified models.
 
+The model picker searches model names, exact IDs, and provider names. Use **All**, **Free**, **Paid**, or **Unverified** filters, refresh the live catalog, or import an exact model ID. Catalog visibility does not confirm usable provider credentials or entitlement; connect that provider in OmniRoute when required. The compact Code picker selects among the routes you have already configured.
+
 OmniRoute coding requests stream answers and declare Canvas's real file, search, edit and command-proposal tools. Native function calls are converted into validated Canvas actions with the same staging and human command approval rules. Existing free automatic selections such as `auto/coding:free` resolve to concrete free catalog routes, can fall back across providers and keep the working route during a coding run. Manually selected models are never silently replaced.
 
 **OpenCode Free needs no account API key.** Its upstream requires a compatible tool-carrying request. Canvas supplies the coding tools, and gateways started by this app also receive OmniRoute's official placeholder-tool configuration for dashboard checks. A previously rejected connection may remain in cooldown; check its status in **OmniRoute → Providers** before retrying. Other providers may require sign-in, keys, local software or a browser runtime. See the [maintainer's prerequisites explanation](https://github.com/diegosouzapw/OmniRoute/discussions/15232) and [OpenCode request contract guidance](https://github.com/diegosouzapw/OmniRoute/discussions/14139).
@@ -156,7 +233,7 @@ Auto Free waits up to 30 seconds for the first answer and can try up to three ro
 
 **Verify Auto Free** and automatic setup check structured coding actions instead of accepting a plain “READY” reply. Coding runs keep the effective model when the live catalog confirms it is free. Malformed complete coding replies and repeated actions can switch to another verified free route while keeping the goal, real tool results, and current source. Recovery is bounded; if no route makes progress, the run stops early and retains staged files. Identical rewrites preserve source review, and repeated exports of the same source reuse the confirmed delivery result.
 
-Directly selected free Kilo coding models use their catalog-advertised instant or low-reasoning variant when available. If a selected coding model repeats actions without progress and the live catalog confirms zero pricing, the run can switch to another verified free route without changing the saved selection. The replacement keeps the goal, real tool results and staged source, and gets a fresh inspection before repetition detection resumes. Routes that loop are skipped by Auto Free for five minutes in the current session. At most two loop recoveries are allowed; paid and price-unverified selections never qualify.
+Directly selected free Kilo coding models use their catalog-advertised instant or low-reasoning variant when available. If a selected coding model repeats actions without progress and the live catalog confirms zero pricing, the run can switch to another verified free route without changing the saved selection. The replacement keeps the goal, real tool results and staged source, and gets a fresh inspection before repetition detection resumes. Routes that loop are skipped by Auto Free for five minutes in the current session. At most one run-local loop recovery is allowed; paid and price-unverified selections never qualify.
 
 If Auto Free's effective model exhausts the token budget without producing an answer and offers a verified free instant mode, recovery can retry that exact model with thinking disabled before trying another route. The same conversation and token ceiling are preserved; partial answers, paid selections, and cancellation are not silently replaced.
 
@@ -169,6 +246,8 @@ Use one custom profile per provider or endpoint. Keys are sent to the endpoint y
 ### Automatic configuration
 
 **Auto configure** discovers the built-in providers, loads fresh catalogs, and checks eligible free routes with a small prompt before saving a working configuration. OmniRoute discovery tries the configured URL, `/v1` when needed, and the equivalent loopback hostname. It does not scan your network, install software, or obtain account keys. Failed providers keep their existing settings, and paid routes are not automatically probed.
+
+Hosted setup on opening Settings is **opt-in** for new installations; existing explicit preferences are preserved. Local model detection reads the installed catalog without generating an answer. **Auto configure**, **Verify Auto Free**, and one-click OmniRoute setup perform small inference checks when requested, so hosted provider quotas still apply to those checks.
 
 ## Live site and browser connections
 
@@ -184,7 +263,26 @@ Project files, canvas content, appearance, and API profiles are saved in this br
 
 In Code, the goal, file listing, inspected source, and prior tool results are sent to the selected model provider. Canvas coding runs include their conversation context, shared project memory, inspected source, and real tool results. Local approved commands mirror the current project into the dedicated project directory. The app includes no analytics or hosted workspace storage.
 
-## Canvas controls
+## Appearance and keyboard controls
+
+Open **Settings → Appearance** to choose **Midnight**, **Graphite**, or **Daylight**, set an accent color, switch between dots/lines/no canvas grid, and select **Smooth**, **Subtle**, or **No animations**. Preferences persist in this browser. Motion also respects the operating system's reduced-motion setting.
+
+The landing page includes a workspace reveal animation, and dialogs/buttons use restrained interaction feedback. The Code interface keeps its explorer/editor/agent arrangement with refined materials, a clear Build/Explain composer, and a compact provider popover that follows its trigger when the viewport moves.
+
+### Code shortcuts
+
+| Action | Control |
+| --- | --- |
+| Open the command palette | **Ctrl/Cmd + K** |
+| Open a project file by name/path | **Ctrl/Cmd + P** |
+| Find in the current source file | **Ctrl/Cmd + F**, with the editor focused |
+| Open replacement controls | **Ctrl/Cmd + H**, with the editor focused |
+| Next / previous search match | **Enter / Shift + Enter** in Find; **F3 / Shift + F3** in the editor |
+| Submit the Build or Explain goal | **Ctrl/Cmd + Enter** in the composer |
+| Navigate a palette or model list | **↑ / ↓**, then **Enter** to choose |
+| Close a dialog or picker | **Esc** |
+
+### Canvas controls
 
 | Action | Control |
 | --- | --- |
