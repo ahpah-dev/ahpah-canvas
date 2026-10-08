@@ -40,6 +40,17 @@ export function normalizeNineRouterUrl(value: string): string {
   return path === '/' ? `${base}/v1` : base;
 }
 
+/** Accept a copied token or Authorization value, without changing the token itself. */
+export function normalizeNineRouterKey(value: string): string {
+  const unwrap = (text: string) => text.length >= 2 &&
+    ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'")))
+    ? text.slice(1, -1).trim() : text;
+  const key = unwrap(unwrap(value.trim()).replace(/^Bearer\s+/i, '').trim());
+  if (key && /[^\x21-\x7e]/.test(key))
+    throw new Error('The 9router key contains spaces or invisible characters inside the token. Copy the complete gateway key from its dashboard.');
+  return key;
+}
+
 export function normalizeCustomProviders(value: unknown): CustomProvider[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();

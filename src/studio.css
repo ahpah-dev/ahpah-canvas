@@ -201,6 +201,13 @@ html[data-canvas-surface='daylight'] {
 .cw-nine-router-fields input { width:100%; min-width:0; padding:10px 11px; background:var(--cw-bg); color:var(--cw-text); border:1px solid var(--cw-border); border-radius:7px; font-size:12px; outline:none; }
 .cw-nine-router-fields input:focus-visible { border-color:var(--cw-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--cw-accent) 14%,transparent); }
 .cw-nine-router-fields input::placeholder { color:var(--cw-muted); }
+.cw-nine-router-key-field { position:relative; display:block; }
+.cw-nine-router-key-field input { padding-right:38px; }
+.cw-nine-router-key-field button { position:absolute; top:50%; right:9px; transform:translateY(-50%); padding:4px; color:var(--cw-muted); }
+.cw-nine-router-key-field button:hover { color:var(--cw-text); }
+.cw-nine-router-key-field button:focus-visible { outline:2px solid var(--cw-accent); border-radius:4px; }
+.cw-nine-router-key-help { margin:13px 0 0; font-size:10px; line-height:1.8; color:var(--cw-muted); }
+.cw-nine-router-key-help strong { font-weight:500; color:var(--cw-body); }
 .cw-nine-router-model { display:flex; align-items:center; gap:16px; justify-content:space-between; margin:18px 0 12px; }
 .cw-nine-router-model strong { display:block; font-size:11px; color:var(--cw-text); font-weight:550; }
 .cw-nine-router-model small { display:block; font-size:10px; line-height:1.6; margin-top:4px; color:var(--cw-muted); }
