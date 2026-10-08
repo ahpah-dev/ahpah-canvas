@@ -177,8 +177,8 @@ function AgentCardBody({
   const custom = card.agentType === "custom" ? config.customProviders?.find((provider) => provider.id === card.providerId) : undefined;
   const name = card.agentName?.trim() || custom?.name || cardName(card);
   const identity = getAgentIdentity(card);
-  const providerName = custom?.name || (card.agentType === "codex" ? "Codex · ChatGPT" : card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
-  const configuredModel = card.agentType === "codex" ? codexModel() : card.agentType === "custom" ? custom?.model || "" : kilo ? config.kiloModel : config.omniRouteModel;
+  const providerName = custom?.name || (card.agentType === '9router' ? '9router' : card.agentType === "codex" ? "Codex · ChatGPT" : card.agentType === "custom" ? card.providerName || "Custom API" : kilo ? "Kilo AI Gateway" : "OmniRoute");
+  const configuredModel = card.agentType === '9router' ? config.nineRouterModel || '' : card.agentType === "codex" ? codexModel() : card.agentType === "custom" ? custom?.model || "" : kilo ? config.kiloModel : config.omniRouteModel;
   const model = configuredModel;
   const lastResponseModel =
     card.modelSource === "live" ? card.routedModel : undefined;
@@ -233,7 +233,7 @@ function AgentCardBody({
       setExpanded(true);
     }
   };
-  const Icon = kilo ? Sparkles : card.agentType === "omniroute" ? Radio : Bot;
+  const Icon = kilo ? Sparkles : card.agentType === "omniroute" || card.agentType === '9router' ? Radio : Bot;
   return (
     <section
       className={`cw-card cw-agent ${kilo ? "cw-kilo" : ""} ${isSelected ? "selected" : ""}`}

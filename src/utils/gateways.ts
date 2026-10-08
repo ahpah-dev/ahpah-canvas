@@ -3,7 +3,7 @@ import { AUTO_FREE_FIRST_ANSWER_MS, CATALOG_TIMEOUT_MS, COMPLETION_TIMEOUT_MS, H
 import { readGatewayStream, type GatewayProgress } from "./gatewayStream.ts";
 import { EmptyCompletionError, GatewayServiceError, NoAnswerError } from "./gatewayErrors.ts";
 import { fastReasoning, hasVerifiedFreePricing, isKiloRouteHealthy, markKiloRouteUnhealthy, verifiedFreeFallbacks } from "./kiloRecovery.ts";
-import { normalizeCustomProviders, normalizeOmniRouteUrl, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
+import { normalizeCustomProviders, normalizeOmniRouteUrl, normalizeNineRouterUrl, normalizeProviderUrl, redactProviderError, type CustomProvider, type GatewayTransport } from "./providerConfig.ts";
 import { omniCodingTools, omniToolActions, completeOmniToolPrefix } from './omniRouteTools.ts';
 import { completeActionPrefix } from './codingResponse.ts';
 import { LOCAL_CODING_OUTPUT_TOKENS } from './localCoding.ts';
@@ -30,6 +30,9 @@ export type GatewayConfig = {
   omniRouteModel: string;
   kiloKey: string;
   kiloModel: string;
+  nineRouterUrl?: string;
+  nineRouterKey?: string;
+  nineRouterModel?: string;
   customProviders?: CustomProvider[];
   transport?: GatewayTransport;
 };
@@ -68,16 +71,17 @@ export function gatewayTransport(config?: GatewayConfig): "bridge" | "direct" {
   return config?.transport === "direct" ? "direct" : "bridge";
 }
 
-function endpoint(provider: "omniroute" | "kilo" | "custom", config?: GatewayConfig, custom?: CustomProvider): { base: string; headers: Record<string, string> } {
+function endpoint(provider: "omniroute" | "kilo" | "custom" | "9router", config?: GatewayConfig, custom?: CustomProvider): { base: string; headers: Record<string, string> } {
   const direct = gatewayTransport(config) === "direct";
   const baseUrl = provider === "kilo" ? KILO_UPSTREAM
+    : provider === '9router' ? normalizeNineRouterUrl(config?.nineRouterUrl || 'http://127.0.0.1:20128/v1')
     : provider === 'custom' ? normalizeProviderUrl(custom?.baseUrl || '') : normalizeOmniRouteUrl(config!.omniRouteUrl);
   if (direct && typeof window !== "undefined" && window.location?.protocol === "https:" && baseUrl.startsWith("http:"))
     throw new Error("This HTTPS site needs an HTTPS API URL. For a local HTTP provider, run the app locally with npm run dev.");
   return {
     base: direct ? baseUrl : provider === "kilo" ? KILO_BASE : `/api/gateway/${provider}`,
     headers: direct || provider === "kilo" ? {} : provider === "custom"
-      ? { "X-Gateway-Url": baseUrl } : { "X-OmniRoute-Url": baseUrl },
+      ? { "X-Gateway-Url": baseUrl } : provider === '9router' ? { 'X-9Router-Url': baseUrl } : { "X-OmniRoute-Url": baseUrl },
   };
 }
 
@@ -99,6 +103,11 @@ export function loadGatewayConfig(): GatewayConfig {
       return {
         omniRouteUrl: saved.omniRouteUrl, omniRouteKey: saved.omniRouteKey,
         omniRouteModel: saved.omniRouteModel, kiloKey: saved.kiloKey, kiloModel: saved.kiloModel,
+        ...([saved.nineRouterUrl, saved.nineRouterKey, saved.nineRouterModel].some(value => typeof value === 'string') ? {
+          nineRouterUrl: typeof saved.nineRouterUrl === 'string' ? saved.nineRouterUrl : 'http://127.0.0.1:20128/v1',
+          nineRouterKey: typeof saved.nineRouterKey === 'string' ? saved.nineRouterKey : '',
+          nineRouterModel: typeof saved.nineRouterModel === 'string' ? saved.nineRouterModel : '',
+        } : {}),
         ...(saved.customProviders ? { customProviders: normalizeCustomProviders(saved.customProviders) } : {}),
         ...(["auto", "direct", "bridge"].includes(saved.transport) ? { transport: saved.transport } : {}),
       };
@@ -116,11 +125,15 @@ export function loadGatewayConfig(): GatewayConfig {
     omniRouteModel: savedValue("ahpah_omniroute_model"),
     kiloKey: savedValue("ahpah_kilo_key"),
     kiloModel: savedValue("ahpah_kilo_model", "kilo-auto/free"),
+    nineRouterUrl: 'http://127.0.0.1:20128/v1', nineRouterKey: '', nineRouterModel: '',
   };
 }
 
 export function saveGatewayConfig(config: GatewayConfig) {
   normalizeProviderUrl(config.omniRouteUrl);
+  const nineRouter = [config.nineRouterUrl, config.nineRouterKey, config.nineRouterModel].some(value => value !== undefined)
+    ? { nineRouterUrl: normalizeNineRouterUrl(config.nineRouterUrl ?? 'http://127.0.0.1:20128/v1'), nineRouterKey: config.nineRouterKey || '', nineRouterModel: (config.nineRouterModel || '').trim() }
+    : {};
   const customProviders = normalizeCustomProviders(config.customProviders);
   for (const provider of customProviders) {
     if (!provider.baseUrl) throw new Error(`Enter an API base URL for ${provider.name}.`);
@@ -132,6 +145,7 @@ export function saveGatewayConfig(config: GatewayConfig) {
     JSON.stringify({
       omniRouteUrl: config.omniRouteUrl.trim(), omniRouteKey: config.omniRouteKey,
       omniRouteModel: config.omniRouteModel.trim(), kiloKey: config.kiloKey, kiloModel: config.kiloModel.trim(),
+      ...nineRouter,
       ...(config.customProviders ? { customProviders } : {}),
       ...(config.transport ? { transport: config.transport } : {}),
     }),
@@ -228,6 +242,26 @@ export async function listOmniRouteModels(
   }
 }
 
+/** Catalog discovery only: preserve opaque model/combination IDs without a completion probe. */
+export async function listNineRouterModels(config: GatewayConfig, signal?: AbortSignal): Promise<GatewayModel[]> {
+  try {
+    const route = endpoint('9router', config);
+    const result = await jsonRequest(`${route.base}/models`, {
+      signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(CATALOG_TIMEOUT_MS)]),
+      cache: 'no-store', headers: { ...authHeaders(config.nineRouterKey || ''), ...route.headers },
+    });
+    if (!Array.isArray(result.data)) throw new Error('9router did not return a model catalog. Use its API base URL ending in /v1.');
+    const ids = new Set<string>();
+    return sortModelCatalog(result.data.filter((model: GatewayModel | null) => {
+      if (!model || typeof model.id !== 'string' || !model.id.trim() || ids.has(model.id)) return false;
+      ids.add(model.id); return true;
+    }));
+  } catch (error) {
+    if (error instanceof Error) Object.defineProperty(error, 'message', { value: redactProviderError(error.message, [config.nineRouterKey || '']), configurable: true });
+    throw error;
+  }
+}
+
 export async function listKiloModels(
   signal?: AbortSignal,
   config?: GatewayConfig,
@@ -266,7 +300,7 @@ export async function listCustomModels(provider: CustomProvider, config: Gateway
 }
 
 export async function sendGatewayPrompt(
-  provider: "omniroute" | "kilo" | "custom",
+  provider: "omniroute" | "kilo" | "custom" | "9router",
   prompt: string,
   config: GatewayConfig,
   options: {
@@ -287,8 +321,8 @@ export async function sendGatewayPrompt(
   const route = endpoint(provider, config, custom);
   const localOllama = !!custom && isLocalOllamaUrl(normalizeProviderUrl(custom.baseUrl));
   const base = route.base;
-  const model = custom ? custom.model : isKilo ? config.kiloModel : config.omniRouteModel;
-  const key = custom ? custom.apiKey : isKilo ? config.kiloKey : config.omniRouteKey;
+  const model = custom ? custom.model : provider === '9router' ? config.nineRouterModel || '' : isKilo ? config.kiloModel : config.omniRouteModel;
+  const key = custom ? custom.apiKey : provider === '9router' ? config.nineRouterKey || '' : isKilo ? config.kiloKey : config.omniRouteKey;
   if (!model)
     throw new Error("Choose a model in Settings before sending a prompt.");
   const completionDeadline = AbortSignal.timeout(localOllama ? LOCAL_COMPLETION_TIMEOUT_MS : COMPLETION_TIMEOUT_MS);
@@ -297,7 +331,7 @@ export async function sendGatewayPrompt(
     completionDeadline,
   ]);
   signal.throwIfAborted();
-  const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute' || localOllama);
+  const nativeCoding = !!options.validateResponse && (isKilo || provider === 'omniroute' || provider === '9router' || localOllama);
   // Accept native replies without requiring installed text-only Ollama models
   // to support advertised tools. Both formats use the same validated runtime.
   const advertiseNativeTools = nativeCoding && !localOllama;
@@ -367,6 +401,8 @@ export async function sendGatewayPrompt(
       "Content-Type": "application/json",
       ...authHeaders(key),
       ...route.headers,
+      // Preserve source and coding instructions when the router has token modifiers enabled.
+      ...(provider === '9router' && nativeCoding ? { 'X-9Router-Token-Saver': 'off' } : {}),
       ...(isKilo && options.runId && /^[a-zA-Z0-9_-]{1,100}$/.test(options.runId) ? { 'X-KiloCode-TaskId': options.runId } : {}),
     },
   };
@@ -396,7 +432,7 @@ export async function sendGatewayPrompt(
     options.onProgress?.({
       text: "",
       phase: attempt || target.id !== model ? "retrying" : "waiting",
-      detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : localOllama ? `Waiting for ${label} on this computer. The first model load can take a few minutes. Stop cancels this request.` : `Waiting for ${custom?.name || (isKilo ? "Kilo" : "OmniRoute")}`,
+      detail: attempt || target.id !== model ? `Trying ${label} after a slow or unavailable free route` : localOllama ? `Waiting for ${label} on this computer. The first model load can take a few minutes. Stop cancels this request.` : `Waiting for ${custom?.name || (provider === '9router' ? '9router' : isKilo ? "Kilo" : "OmniRoute")}`,
     });
     try {
       const reasoning = isKilo && (automatic || (options.validateResponse && hasVerifiedFreePricing(target))) ? fastReasoning(target) : undefined;
@@ -489,7 +525,7 @@ export async function sendGatewayPrompt(
         );
       if (refusal.trim()) return { text: refusal, model: resolvedModel, tokens };
       if (text.trim()) {
-        if (options.validateResponse && (automatic || provider === 'omniroute')) {
+        if (options.validateResponse && (automatic || provider === 'omniroute' || provider === '9router')) {
           try { options.validateResponse(text); }
           catch (failure) {
             throw new UnusableCodingResponseError(`${resolvedModel} returned unusable coding actions: ${failure instanceof Error ? failure.message : 'Invalid response'}`, resolvedModel);
@@ -544,6 +580,15 @@ export async function sendGatewayPrompt(
           402: 'This Kilo account has insufficient balance. Choose Auto Free or another verified free model, or update the account balance.',
           403: 'Check the Kilo account or organization model permissions before retrying.',
           429: 'Wait before retrying. Anonymous Kilo access has an IP rate limit; adding your Kilo API key in Settings can use your account limits.',
+        };
+        if (guidance[error.status || 0]) error.message += ` ${guidance[error.status || 0]}`;
+      }
+      if (provider === '9router' && error instanceof GatewayServiceError) {
+        const guidance: Record<number, string> = {
+          401: 'Check the gateway API key and upstream provider connections in the 9router dashboard.',
+          403: 'Check the gateway key permissions and selected provider account in 9router.',
+          404: 'Refresh the 9router catalog and select an available model or combo.',
+          429: 'The route is rate limited. Wait before retrying or adjust its combo in the 9router dashboard.',
         };
         if (guidance[error.status || 0]) error.message += ` ${guidance[error.status || 0]}`;
       }

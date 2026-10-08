@@ -17,6 +17,7 @@ export function AddCardMenu({ onAdd, onClose, onOpenSettings }: Props) {
   useEffect(() => { search.current?.focus(); }, []);
   const options = [
     { id: 'omniroute', group: 'CODING AGENTS', name: 'OmniRoute agent', description: 'Your gateway’s current models', icon: Radio, select: () => onAdd('agent', 'omniroute') },
+    { id: '9router', group: 'CODING AGENTS', name: '9router agent', description: 'Live models and routing combos', icon: Radio, select: () => onAdd('agent', '9router') },
     { id: 'kilo', group: 'CODING AGENTS', name: 'Kilo Auto Free', description: 'Dynamic free model routing', icon: Sparkles, select: () => onAdd('agent', 'kilo') },
     { id: 'codex', group: 'CODING AGENTS', name: 'Codex agent', description: 'Use your ChatGPT subscription', icon: Code2, select: () => onAdd('agent', 'codex') },
     ...providers.map(provider => ({ id: `custom:${provider.id}`, group: 'YOUR MODELS', name: provider.name, description: provider.model || 'Choose a model in Settings', icon: Radio, select: () => onAdd('agent', 'custom', provider.id) })),

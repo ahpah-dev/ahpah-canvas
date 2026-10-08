@@ -13,7 +13,7 @@ export function parseVoiceTranscript(transcript: string): VoiceDispatchEvent {
   }
 
   // Pattern: "open [agent]" or "spawn [agent]" or "launch [agent]"
-  const openMatch = clean.match(/(?:open|spawn|launch|add|start)\s+(omniroute|kilo|kilo\s*code|deepseek|qwen|claude|codex|gemini|aider|cursor|grok|ollama|terminal|browser|preview|notes|note)/i);
+  const openMatch = clean.match(/(?:open|spawn|launch|add|start)\s+(9router|omniroute|kilo|kilo\s*code|deepseek|qwen|claude|codex|gemini|aider|cursor|grok|ollama|terminal|browser|preview|notes|note)/i);
   if (openMatch) {
     let rawTarget = openMatch[1].replace(/\s+/g, '');
     if (rawTarget === 'kilocode') rawTarget = 'kilo';
@@ -28,7 +28,7 @@ export function parseVoiceTranscript(transcript: string): VoiceDispatchEvent {
   }
 
   // Pattern: "tell [agent] to [prompt]" or "ask [agent] [prompt]" or "[agent] [prompt]"
-  const tellMatch = clean.match(/(?:tell|ask|command|direct)\s+(omniroute|kilo|kilo\s*code|deepseek|qwen|claude|codex|gemini|aider|cursor|grok|ollama)\s+(?:to\s+)?(.+)/i);
+  const tellMatch = clean.match(/(?:tell|ask|command|direct)\s+(9router|omniroute|kilo|kilo\s*code|deepseek|qwen|claude|codex|gemini|aider|cursor|grok|ollama)\s+(?:to\s+)?(.+)/i);
   if (tellMatch) {
     let rawTarget = tellMatch[1].replace(/\s+/g, '');
     if (rawTarget === 'kilocode') rawTarget = 'kilo';
@@ -58,7 +58,7 @@ export function parseVoiceTranscript(transcript: string): VoiceDispatchEvent {
   }
 
   // Direct address: "kilo refactor auth" or "omniroute compress"
-  const agentKeys: AgentType[] = ['omniroute', 'kilo', 'deepseek', 'qwen', 'claude', 'codex', 'gemini', 'aider', 'cursor', 'grok', 'ollama'];
+  const agentKeys: AgentType[] = ['9router', 'omniroute', 'kilo', 'deepseek', 'qwen', 'claude', 'codex', 'gemini', 'aider', 'cursor', 'grok', 'ollama'];
   const directAgent = agentKeys.find(a => clean.startsWith(a + ' '));
   if (directAgent) {
     return {

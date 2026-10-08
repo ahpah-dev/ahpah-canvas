@@ -174,7 +174,7 @@ export async function runEngineeringAgent(options: {
   const observedTools = new Set<string>();
   const sourceSnapshot = () => JSON.stringify([...working].sort((a, b) => a.path.localeCompare(b.path)));
   const seenSourceSnapshots = new Set([sourceSnapshot()]);
-  const budgetedProvider = ['kilo', 'omniroute', 'codex'].includes(providerId) || providerId.startsWith('custom:');
+  const budgetedProvider = ['kilo', 'omniroute', 'codex', '9router'].includes(providerId) || providerId.startsWith('custom:');
   const requestLimit = options.localModel ? LOCAL_CODING_MAX_REQUESTS : AGENT_MAX_REQUESTS;
   const routing: AgentRoutingState | undefined = budgetedProvider ? {
     excludedModels: [], requestLimit,

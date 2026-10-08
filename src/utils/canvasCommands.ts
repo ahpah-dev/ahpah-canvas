@@ -65,7 +65,7 @@ export function resolveCanvasCommand(text: string, cards: CanvasCard[], provider
       terminal: { cardType: 'terminal', label: 'command scratchpad' },
     };
     if (tools[name]) return { kind: 'launch', ...tools[name], label: `Add ${tools[name].label}`, detail: 'Create and focus a canvas card · no model request' };
-    const builtins: Record<string, AgentType> = { codex: 'codex', kilo: 'kilo', 'kilo code': 'kilo', kilocode: 'kilo', 'kilo auto free': 'kilo', omniroute: 'omniroute', 'omni route': 'omniroute' };
+    const builtins: Record<string, AgentType> = { '9router': '9router', '9 router': '9router', codex: 'codex', kilo: 'kilo', 'kilo code': 'kilo', kilocode: 'kilo', 'kilo auto free': 'kilo', omniroute: 'omniroute', 'omni route': 'omniroute' };
     const builtin = builtins[name];
     const exactId = providers.find(provider => normalize(provider.id) === name);
     const matches = exactId ? [exactId] : providers.filter(provider => normalize(provider.label) === name || normalize(provider.model) === name || (name === 'local' && provider.localModel));
@@ -76,7 +76,7 @@ export function resolveCanvasCommand(text: string, cards: CanvasCard[], provider
       return {
         kind: 'launch', cardType: 'agent', agentType,
         ...(agentType === 'custom' ? { providerId: provider!.id.slice('custom:'.length) } : {}),
-        label: `Open ${provider?.label ?? (builtin === 'kilo' ? 'Kilo Auto Free' : builtin === 'codex' ? 'Codex' : 'OmniRoute')}`,
+        label: `Open ${provider?.label ?? (builtin === '9router' ? '9router' : builtin === 'kilo' ? 'Kilo Auto Free' : builtin === 'codex' ? 'Codex' : 'OmniRoute')}`,
         detail: provider ? `${provider.model} · creates an idle agent, no model request` : 'Creates an idle agent · connect its model in Settings',
       };
     }

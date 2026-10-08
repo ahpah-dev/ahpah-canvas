@@ -14,6 +14,13 @@ export interface AgentDefinition {
 }
 
 export const AGENT_REGISTRY: Record<AgentType, AgentDefinition> = {
+  '9router': {
+    type: '9router', name: '9router', command: '9router OpenAI-compatible gateway',
+    badge: 'Live models & combos', color: '#a5b4fc', borderColor: 'border-indigo-400/50', bgGlow: '',
+    description: 'Use models and routing combos from your 9router dashboard.',
+    defaultRole: 'Implementation & code review',
+    quickPrompts: ['Implement this feature in the project', 'Review the current code for bugs', 'Plan the next implementation steps'],
+  },
   omniroute: {
     type: 'omniroute',
     name: 'OmniRoute Gateway',

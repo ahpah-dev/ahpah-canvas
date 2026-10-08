@@ -31,6 +31,15 @@ export function normalizeOmniRouteUrl(value: string): string {
   return new URL(base).pathname === '/' ? `${base}/v1` : base;
 }
 
+/** 9router accepts a server root or its OpenAI-compatible /v1 base. */
+export function normalizeNineRouterUrl(value: string): string {
+  const base = normalizeProviderUrl(value);
+  const path = new URL(base).pathname;
+  if (/\/dashboard(?:\/|$)/.test(path))
+    throw new Error('Enter the 9router API URL, without /dashboard.');
+  return path === '/' ? `${base}/v1` : base;
+}
+
 export function normalizeCustomProviders(value: unknown): CustomProvider[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();

@@ -14,7 +14,7 @@ const selectFields = (value: Record<string, unknown>, fields: readonly string[])
       .map((field) => [field, value[field]]),
   );
 const agentTypes: AgentType[] = [
-  "omniroute", "kilo", "deepseek", "qwen", "claude", "codex", "gemini",
+  "omniroute", "9router", "kilo", "deepseek", "qwen", "claude", "codex", "gemini",
   "aider", "cursor", "grok", "ollama", "custom",
 ];
 const cardFields = [

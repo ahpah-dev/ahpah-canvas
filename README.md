@@ -1,6 +1,6 @@
 # AhPah Canvas
 
-An open source agentic coding workspace with real project files, a syntax highlighted editor, visible agent actions, reviewed changes, and previews. Run **local Ollama models without hosted API quotas**, or connect **Codex with your ChatGPT subscription**, OmniRoute, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
+An open source agentic coding workspace with real project files, a syntax highlighted editor, visible agent actions, reviewed changes, and previews. Run **local Ollama models without hosted API quotas**, or connect **Codex with your ChatGPT subscription**, OmniRoute, **9router**, Kilo AI Gateway, or your own OpenAI compatible API. Use **Code** to build software and **Canvas** to keep planning, conversations, and project context in view.
 
 [Open the live site](https://ahpah-dev.github.io/ahpah-canvas/) · [Source on GitHub](https://github.com/ahpah-dev/ahpah-canvas) · [MIT license](LICENSE)
 
@@ -57,6 +57,7 @@ Menu buttons prepare commands without executing them. Unknown or ambiguous `@` n
 - Local Ollama setup that detects actual installed models, installs/starts the official Windows runtime when requested, and downloads explicitly chosen models with progress and cancellation.
 - Codex in **Code**, **Canvas**, and **Add card**, with one-click local ChatGPT connection, live model selection, and native workspace tool calls.
 - One-click OmniRoute installation, startup, connection, live catalog loading, and coding compatibility checks of eligible free routes.
+- Native **9router** support in Code, Canvas, Add card, and Canvas Commands: an independent URL/key/model connection, live models and routing combos, streamed answers, and validated native coding tools. Catalog discovery sends no completion probes.
 - Live model search by name, ID, and provider; free/paid/unverified filters; current catalog ordering; and exact model-ID import when discovery does not list a selection.
 - Kilo Auto Free routing with live zero-price evidence, bounded recovery, advertised instant/low-reasoning variants, and preservation of source and tool results when a route fails or repeats work.
 - Named OpenAI compatible API profiles with a base URL, optional API key, chosen model, and streaming preference.
@@ -68,7 +69,7 @@ Menu buttons prepare commands without executing them. Unknown or ambiguous `@` n
 - A redesigned studio landing page with an editorial hero, interactive engineering showcase, and direct Code, Canvas, and setup entry points. Neutral materials, stronger typography, and quieter controls carry across the workspaces while preserving Code’s explorer/editor/agent layout.
 - A smooth workspace reveal on the landing page, restrained button/dialog feedback, responsive panels, and visible focus states.
 - **Midnight, Graphite, and Daylight** themes, custom accents, dots/lines/no grid, and **Smooth, Subtle, or No animations** motion preferences that respect reduced-motion settings.
-- **Quick start** takes you directly to local-model or hosted-provider setup. Settings includes shortcuts to Local AI, Codex, OmniRoute, Kilo, and custom APIs, with **Save changes** and **Close** always visible while connection settings scroll.
+- **Quick start** takes you directly to local-model or hosted-provider setup. Settings includes shortcuts to Local AI, Codex, OmniRoute, 9router, Kilo, and custom APIs, with **Save changes** and **Close** always visible while connection settings scroll.
 - Starter projects, keyboard navigation, useful empty states, compact task controls on shorter windows, and automatic dark/light button text for custom accents.
 - Canvas gestures batched once per animation frame, memoized conversations, buffered workspace saves, and streaming scroll that lets you read earlier messages.
 
@@ -81,7 +82,7 @@ Menu buttons prepare commands without executing them. Unknown or ambiguous `@` n
 | Local Ollama setup and inference | Yes | Requires the local app |
 | Codex with ChatGPT sign-in | Yes | Requires the local app |
 | Kilo AI Gateway | Yes, through the included bridge | Requires the local app |
-| OmniRoute or custom compatible APIs | Yes | HTTPS endpoints with browser CORS support |
+| OmniRoute, 9router, or custom compatible APIs | Yes | HTTPS endpoints with browser CORS support |
 | Approved Node/npm execution and compiled previews | Yes | Requires the local app |
 
 The workspace is free and MIT licensed. Local inference has no hosted API quota; hardware capacity, runtime context, and bounded agent runs still apply. Hosted providers and ChatGPT subscriptions retain their own prices, access rules, and limits.
@@ -184,7 +185,7 @@ The app reports a PC save only after the writer closes successfully. General sou
 
 ### Tool calling
 
-Codex uses native workspace tool calls. OmniRoute and supported Kilo routes can return native calls that are converted into the same validated project actions. Ollama coding explicitly requests JSON actions, with compatibility handling for native replies. Custom text providers use the JSON action protocol.
+Codex uses native workspace tool calls. OmniRoute, 9router, and supported Kilo routes can return native calls that are converted into the same validated project actions. Ollama coding explicitly requests JSON actions, with compatibility handling for native replies. Custom text providers use the JSON action protocol.
 
 | Action | Purpose |
 | --- | --- |
@@ -241,6 +242,27 @@ The model picker searches model names, exact IDs, and provider names. Use **All*
 OmniRoute coding requests stream answers and declare Canvas's real file, search, edit and command-proposal tools. Native function calls are converted into validated Canvas actions with the same staging and human command approval rules. Existing free automatic selections such as `auto/coding:free` resolve to concrete free catalog routes, can fall back across providers and keep the working route during a coding run. Manually selected models are never silently replaced.
 
 **OpenCode Free needs no account API key.** Its upstream requires a compatible tool-carrying request. Canvas supplies the coding tools, and gateways started by this app also receive OmniRoute's official placeholder-tool configuration for dashboard checks. A previously rejected connection may remain in cooldown; check its status in **OmniRoute → Providers** before retrying. Other providers may require sign-in, keys, local software or a browser runtime. See the [maintainer's prerequisites explanation](https://github.com/diegosouzapw/OmniRoute/discussions/15232) and [OpenCode request contract guidance](https://github.com/diegosouzapw/OmniRoute/discussions/14139).
+
+### 9router
+
+Open **Settings → Connections → 9router**. This is a dedicated native provider, so its connection and selection are saved independently of OmniRoute and custom APIs.
+
+1. Install and start the official gateway:
+
+   ```sh
+   npm install -g 9router
+   9router
+   ```
+
+2. In the [9router dashboard](http://localhost:20128/dashboard), connect your upstream providers and copy a gateway API key.
+3. Enter the API base URL (default `http://127.0.0.1:20128/v1`) and gateway key in AhPah. A server root URL is normalized to `/v1`; dashboard URLs are rejected.
+4. Click **Load models**, choose a live model or routing combo, then **Use in Code** or **Add to Canvas**. You can also import an exact ID through the model selector. Saved selections appear in the Code provider picker; **Add card → 9router agent** and `/open 9router` open a Canvas agent.
+
+Discovery uses `GET /v1/models`, keeps the catalog's exact model/combo IDs, and does not spend completion tokens or select a model for you. Coding uses streamed OpenAI-compatible completions and AhPah's native file, search, edit, and command-proposal tools. Tool proposals follow the existing validation, staged review, and command approval rules. Coding requests bypass 9router's token-saver modifiers to preserve source and action instructions.
+
+9router manages its own combo routing and fallback. AhPah sends your selected ID without replacing it with Kilo or OmniRoute routes. Hosted request/time limits and Canvas refresh checkpoints also apply to 9router. Upstream account limits, eligibility, and pricing still apply; catalog visibility alone does not prove access or zero pricing.
+
+**Port collision:** 9router and OmniRoute both default to `20128`. Run them on different ports if using both, and enter each API URL separately. The local app includes the 9router bridge for gateways without browser CORS support. GitHub Pages requires an HTTPS endpoint that permits browser requests; it cannot start a local gateway. See [9router's official documentation](https://github.com/decolua/9router) for gateway installation and provider configuration.
 
 ### Kilo AI Gateway
 

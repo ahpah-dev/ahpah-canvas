@@ -37,6 +37,7 @@ import { CustomProvidersPanel } from "./CustomProvidersPanel";
 import { LocalModelsPanel } from "./LocalModelsPanel";
 import { CodexConnectionPanel } from "./CodexConnectionPanel";
 import { OmniRouteSetupButton } from './OmniRouteSetupButton';
+import { NineRouterPanel, type NineRouterConnection } from './NineRouterPanel';
 import { useDialogFocus } from "../../utils/useDialogFocus";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import {
@@ -64,6 +65,7 @@ interface SettingsModalProps {
   onConnectLocal: () => void;
   onConnectCodex: () => void;
   onConnectOmniRoute: () => void;
+  onConnectNineRouter: (destination: 'code' | 'canvas') => void;
 }
 
 type ConnectionState = "idle" | "checking" | "connected" | "verified" | "error";
@@ -120,6 +122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onConnectLocal,
   onConnectCodex,
   onConnectOmniRoute,
+  onConnectNineRouter,
 }) => {
   useDialogFocus(isOpen, onClose);
   const present = useDialogPresence(isOpen);
@@ -158,6 +161,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     () => loadGatewayConfig().omniRouteModel,
   );
   const [kiloKey, setKiloKey] = useState(() => loadGatewayConfig().kiloKey);
+  const [nineRouter, setNineRouter] = useState<NineRouterConnection>(() => {
+    const config = loadGatewayConfig();
+    return { nineRouterUrl: config.nineRouterUrl || 'http://127.0.0.1:20128/v1', nineRouterKey: config.nineRouterKey || '', nineRouterModel: config.nineRouterModel || '' };
+  });
   const [customProviders, setCustomProviders] = useState<CustomProvider[]>(() => loadGatewayConfig().customProviders || []);
   const [transport, setTransport] = useState<GatewayTransport>(() => loadGatewayConfig().transport || "auto");
   const [kiloModel, setKiloModel] = useState(
@@ -202,7 +209,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setSaveError("");
     try {
       const result = await autoConfigureGateways(
-        { ...loadGatewayConfig(), transport, omniRouteUrl, omniRouteKey, omniRouteModel, kiloKey, kiloModel },
+        { ...loadGatewayConfig(), ...nineRouter, transport, omniRouteUrl, omniRouteKey, omniRouteModel, kiloKey, kiloModel },
         AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
         (progress) => {
           setSetup((previous) => ({
@@ -229,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (ready.length) {
         const verifiedConfig = result.providers.reduce(
           (next, provider) => ({ ...next, ...provider.config }),
-          { ...loadGatewayConfig(), transport },
+          { ...loadGatewayConfig(), ...nineRouter, transport },
         );
         try {
           saveGatewayConfig(verifiedConfig);
@@ -284,6 +291,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     checkingCatalog,
     omniQuickRunning,
     transport,
+    nineRouter,
   ]);
   useEffect(() => {
     if (!isOpen || !autoOnOpen || automaticallyStarted.current) return;
@@ -306,6 +314,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const config = {
     ...loadGatewayConfig(),
+    ...nineRouter,
     omniRouteUrl,
     omniRouteKey,
     omniRouteModel,
@@ -531,6 +540,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   { id: 'local', name: 'Local AI', detail: 'On your device', icon: Cpu },
                   { id: 'codex', name: 'Codex', detail: 'GPT subscription', icon: Code2 },
                   { id: 'omniroute', name: 'OmniRoute', detail: 'Model gateway', icon: Radio },
+                  { id: '9router', name: '9router', detail: 'Models & combos', icon: Radio },
                   { id: 'kilo', name: 'Kilo', detail: 'Free routing', icon: Sparkles },
                   { id: 'custom', name: 'Custom API', detail: 'Your endpoint', icon: Plug },
                 ] as const).map(connection => <button key={connection.id} type="button" onClick={() => jumpToConnection(connection.id)}><connection.icon size={17} /><strong>{connection.name}</strong><small>{connection.detail}</small><ArrowRight size={12} /></button>)}
@@ -555,7 +565,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }} />
             </div>
             <details ref={hostedOptions} className="cw-connection-options">
-            <summary>Hosted & custom providers <span>Codex · OmniRoute · Kilo · your API</span></summary>
+            <summary>Hosted & custom providers <span>Codex · OmniRoute · 9router · Kilo · your API</span></summary>
             <div>
             <div id="connection-codex" tabIndex={-1} role="group" aria-label="Codex connection" className="cw-connection-destination"><CodexConnectionPanel onConnected={onConnectCodex} /></div>
             <section className="cw-auto-setup">
@@ -697,6 +707,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               setOmniRouteUrl(result.config.omniRouteUrl); setOmniRouteModel(result.config.omniRouteModel);
               setOmniModels(result.models); setOmniState('verified'); setOmniError('');
               setTransport('bridge'); onToggleSimulated(false); onConnectOmniRoute();
+            }} /></div>
+            <div id="connection-9router" tabIndex={-1} role="group" aria-label="9router connection" className="cw-connection-destination mb-5"><NineRouterPanel config={config} active={isOpen} disabled={running || checkingCatalog || omniQuickRunning} onChange={update => { setNineRouter(previous => ({ ...previous, ...update })); setSaved(false); }} onUse={destination => {
+              try {
+                saveGatewayConfig(config); setSaveError(''); onToggleSimulated(false);
+                if (destination === 'code') {
+                  localStorage.setItem('ahpah_engineering_provider', '9router');
+                  window.dispatchEvent(new Event('ahpah-engineering-provider-selected'));
+                }
+                onConnectNineRouter(destination);
+              } catch (error) { setSaveError(error instanceof Error ? error.message : 'Could not save the 9router connection.'); }
             }} /></div>
             <fieldset
               disabled={running || checkingCatalog || omniQuickRunning}

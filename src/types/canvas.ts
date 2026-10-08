@@ -5,6 +5,7 @@ export type AgentSpecialization = 'coding' | 'design' | 'backend' | 'planning' |
 
 export type AgentType =
   | 'omniroute'
+  | '9router'
   | 'kilo'
   | 'deepseek'
   | 'qwen'

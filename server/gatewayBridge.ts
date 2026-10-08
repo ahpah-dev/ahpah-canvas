@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { once } from "node:events";
-import { normalizeOmniRouteUrl, normalizeProviderUrl } from "../src/utils/providerConfig.ts";
+import { normalizeOmniRouteUrl, normalizeNineRouterUrl, normalizeProviderUrl } from "../src/utils/providerConfig.ts";
 import {
   CATALOG_TIMEOUT_MS,
   COMPLETION_TIMEOUT_MS,
@@ -22,7 +22,7 @@ export async function gatewayMiddleware(
     return;
   }
   const match = route.pathname.match(
-    /^\/api\/gateway\/(omniroute|kilo|custom)\/(models|chat\/completions)$/,
+    /^\/api\/gateway\/(omniroute|kilo|custom|9router)\/(models|chat\/completions)$/,
   );
   const json = (status: number, message: string) => {
     if (!response.destroyed) {
@@ -65,11 +65,12 @@ export async function gatewayMiddleware(
     const base =
       match[1] === "kilo"
         ? "https://api.kilo.ai/api/gateway"
+        : match[1] === '9router' ? String(request.headers['x-9router-url'] || 'http://127.0.0.1:20128/v1')
         : match[1] === "custom" ? String(request.headers["x-gateway-url"] || "") : String(
             request.headers["x-omniroute-url"] || "http://localhost:20128/v1",
           );
     let normalizedBase: string;
-    try { normalizedBase = match[1] === 'omniroute' ? normalizeOmniRouteUrl(base) : normalizeProviderUrl(base); }
+    try { normalizedBase = match[1] === 'omniroute' ? normalizeOmniRouteUrl(base) : match[1] === '9router' ? normalizeNineRouterUrl(base) : normalizeProviderUrl(base); }
     catch (error) {
       json(400, error instanceof Error ? error.message : "Invalid provider URL.");
       return;
@@ -119,6 +120,8 @@ export async function gatewayMiddleware(
     };
     if (request.headers.authorization)
       headers.Authorization = request.headers.authorization;
+    if (match[1] === '9router' && request.headers['x-9router-token-saver'] === 'off')
+      headers['X-9Router-Token-Saver'] = 'off';
     if (match[1] === 'kilo') {
       const taskId = request.headers['x-kilocode-taskid'];
       if (typeof taskId === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(taskId)) headers['X-KiloCode-TaskId'] = taskId;

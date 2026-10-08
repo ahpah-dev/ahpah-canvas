@@ -364,7 +364,7 @@ export function App() {
         width: 500,
         height: 500,
         title:
-          custom ? custom.name : aType === "kilo"
+          custom ? custom.name : aType === '9router' ? '9router Agent' : aType === "kilo"
             ? "Kilo Auto Free"
             : aType === "codex"
               ? "Codex"
@@ -372,7 +372,7 @@ export function App() {
               ? "OmniRoute Agent"
               : `${def.name} · ${def.defaultRole}`,
         role:
-          custom ? "OpenAI-compatible API" : aType === "kilo"
+          custom ? "OpenAI-compatible API" : aType === '9router' ? 'Models & routing combos' : aType === "kilo"
             ? "Dynamic free model routing"
             : aType === "codex"
               ? "ChatGPT subscription"
@@ -388,7 +388,7 @@ export function App() {
           {
             id: `init-${Date.now()}-1`,
             text:
-              custom ? `› ${custom.name} · ${custom.model || "model not selected"}` : aType === "kilo"
+              custom ? `› ${custom.name} · ${custom.model || "model not selected"}` : aType === '9router' ? `› 9router · ${loadGatewayConfig().nineRouterModel || 'model not selected'}` : aType === "kilo"
                 ? `› Kilo AI Gateway · ${loadGatewayConfig().kiloModel}`
                 : aType === "codex"
                   ? `› Codex · ${codexModel() || "Connect in Settings"}`
@@ -549,10 +549,10 @@ export function App() {
         complete({ status: 'idle', lastAction: 'Demo response · no gateway contacted' });
         return;
       }
-      if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
+      if (!['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex', '9router'].includes(card.agentType || '')) throw new Error('Add a gateway or custom API card to run a coding agent.');
       const gatewayConfig = loadGatewayConfig();
-      const providerId = resumeCheckpoint?.providerId ?? (card.agentType === 'codex' ? 'codex' : card.agentType === 'custom' ? `custom:${card.providerId}` : card.agentType === 'kilo' ? 'kilo' : 'omniroute');
-      const provider = providerId === 'kilo' ? 'kilo' : providerId === 'codex' ? 'omniroute' : providerId.startsWith('custom:') ? 'custom' : 'omniroute';
+      const providerId = resumeCheckpoint?.providerId ?? (card.agentType === '9router' ? '9router' : card.agentType === 'codex' ? 'codex' : card.agentType === 'custom' ? `custom:${card.providerId}` : card.agentType === 'kilo' ? 'kilo' : 'omniroute');
+      const provider = providerId === '9router' ? '9router' : providerId === 'kilo' ? 'kilo' : providerId === 'codex' ? 'omniroute' : providerId.startsWith('custom:') ? 'custom' : 'omniroute';
       let project = resumeCheckpoint?.workingProject ?? loadCanvasProject(cardId);
       if (!project) {
         try { const oldHtml = conversationHtml(card.history); project = projectForCanvas(cardId, [{ path: oldHtml.filename, content: oldHtml.html }]); }
@@ -783,7 +783,7 @@ export function App() {
       const id = handleAddCard(
         type,
         type === "agent"
-          ? target === "kilo"
+          ? target === '9router' ? '9router' : target === "kilo"
             ? "kilo"
             : target === "codex"
               ? "codex"
@@ -1018,6 +1018,14 @@ export function App() {
       />
 
       <SettingsModal
+        onConnectNineRouter={(destination) => {
+          setIsSimulated(false); setIsSettingsOpen(false);
+          if (destination === 'code') setCurrentView('code');
+          else {
+            const id = cardsRef.current.find(card => card.type === 'agent' && card.agentType === '9router')?.id || handleAddCard('agent', '9router');
+            setCurrentView('canvas'); focusCard(id);
+          }
+        }}
         connectionTarget={settingsConnectionTarget}
         onConnectLocal={() => { setCurrentView('code'); setIsSettingsOpen(false); }}
         onConnectOmniRoute={() => {

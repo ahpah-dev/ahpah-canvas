@@ -12,6 +12,8 @@ export function engineeringProviders(config: GatewayConfig): EngineeringProvider
     providers.push({ id: "kilo", label: config.kiloModel === "kilo-auto/free" ? "Kilo Auto Free" : "Kilo Gateway", model: config.kiloModel });
   if (config.omniRouteModel.trim())
     providers.push({ id: "omniroute", label: "OmniRoute", model: config.omniRouteModel });
+  if (config.nineRouterModel?.trim())
+    providers.push({ id: '9router', label: '9router', model: config.nineRouterModel });
   for (const provider of config.customProviders || []) {
     if (provider.model.trim()) {
       let localModel = false;
@@ -26,9 +28,9 @@ export const sendEngineeringStep: AgentSender = async (request) => {
   if (request.providerId === "codex") return sendCodexPrompt(request.prompt, request);
   const config = loadGatewayConfig();
   const custom = request.providerId.startsWith("custom:");
-  if (!custom && !["kilo", "omniroute"].includes(request.providerId))
+  if (!custom && !["kilo", "omniroute", "9router"].includes(request.providerId))
     throw new Error("Choose a configured coding provider in Settings.");
-  return sendGatewayPrompt(custom ? "custom" : request.providerId as "kilo" | "omniroute", request.prompt, config, {
+  return sendGatewayPrompt(custom ? "custom" : request.providerId as "kilo" | "omniroute" | "9router", request.prompt, config, {
     runId: request.runId,
     signal: request.signal,
     messages: request.messages,

@@ -46,7 +46,7 @@ function safeCheckpoint(value: unknown): CanvasRunCheckpoint | null {
     typeof candidate.goal !== 'string' || !candidate.goal.trim() || candidate.goal.length > 6000 ||
     typeof candidate.inputId !== 'string' || candidate.inputId.length > 160 ||
     typeof candidate.inputTimestamp !== 'string' || candidate.inputTimestamp.length > 64 ||
-    typeof candidate.providerId !== 'string' || !/^(?:kilo|omniroute|codex|custom:[\w-]{1,100})$/.test(candidate.providerId) ||
+    typeof candidate.providerId !== 'string' || !/^(?:kilo|omniroute|codex|9router|custom:[\w-]{1,100})$/.test(candidate.providerId) ||
     typeof candidate.context !== 'string' || candidate.context.length > 64_000 ||
     (candidate.requestsUsed !== undefined && (typeof candidate.requestsUsed !== 'number' || !Number.isInteger(candidate.requestsUsed) || candidate.requestsUsed < 0 || candidate.requestsUsed > (candidate.providerId.startsWith('custom:') ? LOCAL_CODING_MAX_REQUESTS : AGENT_MAX_REQUESTS))) ||
     typeof candidate.startedAt !== 'number' || !Number.isFinite(candidate.startedAt) || Date.now() - candidate.startedAt > MAX_AGE_MS ||
@@ -55,7 +55,7 @@ function safeCheckpoint(value: unknown): CanvasRunCheckpoint | null {
     const identity = candidate.agentIdentity as AgentIdentityInput;
     const specialization = AGENT_SPECIALIZATIONS.some(item => item.id === identity.specialization) ? identity.specialization! : 'coding';
     const title = typeof identity.title === 'string' && identity.title.length <= 120 ? identity.title : 'Coding agent';
-    const agentTypes: AgentType[] = ['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex'];
+    const agentTypes: AgentType[] = ['omniroute', 'kilo', 'deepseek', 'qwen', 'custom', 'codex', '9router'];
     const agentType = agentTypes.includes(identity.agentType || 'omniroute') ? identity.agentType : 'omniroute';
     const agentIdentity: AgentIdentityInput = {
       ...normalizeAgentIdentity({

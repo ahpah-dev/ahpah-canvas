@@ -134,7 +134,7 @@ html[data-canvas-surface='daylight'] {
 .cw-studio-eyebrow { display:block; font-size:8px; font-weight:600; letter-spacing:.13em; color:var(--cw-muted); }
 .cw-connection-directory h3 { font-size:19px; line-height:1.3; font-weight:550; letter-spacing:-.035em; color:var(--cw-text); margin:9px 0 6px; }
 .cw-connection-directory p { font-size:11px; color:var(--cw-muted); line-height:1.7; margin:0; }
-.cw-connection-directory nav { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:7px; margin-top:18px; }
+.cw-connection-directory nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:18px; }
 .cw-connection-directory nav button { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:8px; text-align:left; padding:13px 10px; min-width:0; border:1px solid var(--cw-border); border-radius:8px; color:var(--cw-body); background:var(--cw-panel); transition:background 150ms,border-color 150ms; }
 .cw-connection-directory nav button:hover { background:var(--cw-panel-raised); border-color:color-mix(in srgb,var(--cw-accent) 40%,var(--cw-border)); }
 .cw-connection-directory nav button strong { font-size:11px; color:var(--cw-text); font-weight:550; }
@@ -189,3 +189,34 @@ html[data-canvas-surface='daylight'] {
 @media (max-width:600px) { .cw-app .cw-nav { padding-inline:12px; gap:10px; } .cw-app .cw-nav-brand strong { display:none; } .cw-app .cw-nav-views button { padding-inline:9px; } .cw-app .cw-nav nav { gap:1px; } .cw-app .cw-nav nav button { padding-inline:7px; } .cw-app .cw-sidebar.collapsed > header { min-height:64px; padding:17px 4px; } .cw-app .cw-workspace-label h1 { font-size:16px; } .cw-app .cw-workspace-label { left:12px; gap:5px; } .cw-app .cw-top-actions { right:10px; } .cw-app .cw-top-actions > .cw-soft-button { display:none; } .cw-app .cw-add-menu { width:min(340px,calc(100vw - 65px)); } .cw-app .cw-empty-options button { padding:14px; } .cw-app .cw-empty-workspace h2 { font-size:29px; } .cw-app .cw-sidebar-search input { font-size:16px; } .cw-settings-dialog { max-height:94dvh; } .cw-settings-dialog > header h2 { font-size:21px; } .cw-start-dialog h2 { font-size:25px; } .cw-start-dialog > header,.cw-start-dialog .cw-start-content { padding:22px; } .cw-start-dialog .cw-start-step { grid-template-columns:26px minmax(0,1fr); } }
 @media (prefers-reduced-motion:reduce) { .cw-connection-directory nav button { transition:none; } }
 :root[data-canvas-motion='none'] .cw-connection-directory nav button { transition:none; }
+
+.cw-nine-router { border:1px solid var(--cw-border); border-radius:12px; padding:20px; background:var(--cw-panel); color:var(--cw-body); }
+.cw-nine-router > header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.cw-nine-router-mark { display:grid; place-items:center; width:38px; height:38px; flex-shrink:0; border:1px solid var(--cw-border); border-radius:10px; background:var(--cw-panel-raised); color:var(--cw-text); }
+.cw-nine-router h3 { margin:0; font-size:16px; letter-spacing:-.025em; color:var(--cw-text); font-weight:600; }
+.cw-nine-router header p { margin:4px 0 0; font-size:11px; color:var(--cw-muted); }
+.cw-nine-router-badge { margin-left:auto; border:1px solid var(--cw-border); border-radius:5px; padding:5px 7px; font-size:9px; white-space:nowrap; color:var(--cw-muted); }
+.cw-nine-router-fields { display:grid; grid-template-columns:1.15fr 1fr; gap:12px; }
+.cw-nine-router-fields label { display:grid; gap:7px; font-size:11px; }
+.cw-nine-router-fields input { width:100%; min-width:0; padding:10px 11px; background:var(--cw-bg); color:var(--cw-text); border:1px solid var(--cw-border); border-radius:7px; font-size:12px; outline:none; }
+.cw-nine-router-fields input:focus-visible { border-color:var(--cw-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--cw-accent) 14%,transparent); }
+.cw-nine-router-fields input::placeholder { color:var(--cw-muted); }
+.cw-nine-router-model { display:flex; align-items:center; gap:16px; justify-content:space-between; margin:18px 0 12px; }
+.cw-nine-router-model strong { display:block; font-size:11px; color:var(--cw-text); font-weight:550; }
+.cw-nine-router-model small { display:block; font-size:10px; line-height:1.6; margin-top:4px; color:var(--cw-muted); }
+.cw-nine-router-model > :last-child { max-width:55%; min-width:160px; }
+.cw-nine-router-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.cw-nine-router-actions span { margin-left:auto; font-size:10px; color:var(--cw-muted); }
+.cw-nine-router a { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--cw-body); text-decoration:none; }
+.cw-nine-router a:hover { color:var(--cw-text); text-decoration:underline; }
+.cw-nine-router-error { font-size:11px; line-height:1.7; color:#fca5a5; margin:12px 0; overflow-wrap:anywhere; }
+.cw-nine-router-guide { margin-top:18px; border-top:1px solid var(--cw-border); padding-top:14px; font-size:11px; line-height:1.8; color:var(--cw-muted); }
+.cw-nine-router-guide summary { cursor:pointer; color:var(--cw-body); }
+.cw-nine-router-guide ol { padding-left:19px; margin:12px 0; }
+.cw-nine-router-guide li { margin:6px 0; }
+.cw-nine-router-guide code { color:var(--cw-text); font-size:10px; padding:2px 5px; border:1px solid var(--cw-border); border-radius:4px; background:var(--cw-bg); }
+.cw-nine-router > footer { border-top:1px solid var(--cw-border); margin-top:18px; padding-top:15px; display:flex; align-items:center; gap:16px; justify-content:space-between; }
+.cw-nine-router footer > span { max-width:240px; font-size:10px; line-height:1.7; color:var(--cw-muted); }
+.cw-nine-router footer > div { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.cw-nine-router button:disabled { opacity:.45; cursor:not-allowed; }
+@media (max-width:600px) { .cw-nine-router { padding:16px; } .cw-nine-router-fields { grid-template-columns:1fr; } .cw-nine-router-badge { display:none; } .cw-nine-router-model { align-items:stretch; flex-direction:column; gap:9px; } .cw-nine-router-model > :last-child { max-width:none; } .cw-nine-router > footer { align-items:stretch; flex-direction:column; gap:12px; } .cw-nine-router footer > span { max-width:none; } .cw-nine-router footer > div { justify-content:flex-end; } }
