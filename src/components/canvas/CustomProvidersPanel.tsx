@@ -4,8 +4,9 @@ import { listCustomModels, type CustomProvider, type GatewayConfig, type Gateway
 import { redactProviderError } from "../../utils/providerConfig";
 import { ModelSelector } from "./ModelSelector";
 
-type Catalog = { models: GatewayModel[]; checking: boolean; error: string; loaded: boolean };
+type Catalog = { models: GatewayModel[]; checking: boolean; error: string; loaded: boolean; scope?: string };
 const emptyCatalog: Catalog = { models: [], checking: false, error: "", loaded: false };
+const catalogScope = (provider: CustomProvider, config: GatewayConfig) => JSON.stringify([provider.baseUrl, provider.apiKey, config.transport]);
 
 export function CustomProvidersPanel({ providers, config, disabled = false, onChange, onUse }: {
   providers: CustomProvider[];
@@ -18,11 +19,16 @@ export function CustomProvidersPanel({ providers, config, disabled = false, onCh
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const controllers = useRef(new Map<string, AbortController>());
   const providersRef = useRef(providers);
+  const [previousTransport, setPreviousTransport] = useState(config.transport);
+  if (previousTransport !== config.transport) {
+    setPreviousTransport(config.transport);
+    setCatalogs({});
+  }
   useLayoutEffect(() => { providersRef.current = providers; }, [providers]);
   useEffect(() => {
     const requests = controllers.current;
-    return () => { for (const controller of requests.values()) controller.abort(); };
-  }, []);
+    return () => { for (const controller of requests.values()) controller.abort(); requests.clear(); };
+  }, [config.transport]);
   const update = (id: string, patch: Partial<CustomProvider>) => {
     if (patch.baseUrl !== undefined || patch.apiKey !== undefined) {
       controllers.current.get(id)?.abort();
@@ -35,16 +41,19 @@ export function CustomProvidersPanel({ providers, config, disabled = false, onCh
     controllers.current.get(provider.id)?.abort();
     const controller = new AbortController();
     controllers.current.set(provider.id, controller);
-    setCatalogs((previous) => ({ ...previous, [provider.id]: { ...emptyCatalog, checking: true } }));
+    const scope = catalogScope(provider, config);
+    setCatalogs((previous) => ({ ...previous, [provider.id]: { ...emptyCatalog, scope, checking: true } }));
     try {
       const models = await listCustomModels(provider, config, controller.signal);
       if (controller.signal.aborted) return;
-      setCatalogs((previous) => ({ ...previous, [provider.id]: { models, checking: false, loaded: true, error: models.length ? "" : "No text models were listed. Enter your model ID manually." } }));
+      const latest = providersRef.current.find(item => item.id === provider.id);
+      if (!latest || latest.baseUrl !== provider.baseUrl || latest.apiKey !== provider.apiKey) return;
+      setCatalogs((previous) => ({ ...previous, [provider.id]: { scope, models, checking: false, loaded: true, error: models.length ? "" : "No text models were listed. Enter your model ID manually." } }));
       // Never replace an explicitly selected model or run a potentially paid probe.
       if (!providersRef.current.find((item) => item.id === provider.id)?.model && models[0]) update(provider.id, { model: models[0].id });
     } catch (error) {
       if (controller.signal.aborted) return;
-      setCatalogs((previous) => ({ ...previous, [provider.id]: { ...emptyCatalog, error: redactProviderError(error instanceof Error ? error.message : "Connection failed.", [provider.apiKey]) } }));
+      setCatalogs((previous) => ({ ...previous, [provider.id]: { ...emptyCatalog, scope, error: redactProviderError(error instanceof Error ? error.message : "Connection failed.", [provider.apiKey]) } }));
     } finally {
       if (controllers.current.get(provider.id) === controller) controllers.current.delete(provider.id);
     }
@@ -58,8 +67,9 @@ export function CustomProvidersPanel({ providers, config, disabled = false, onCh
       </header>
       {providers.length === 0 && <div className="cw-custom-provider-empty"><PlugZap size={24} /><strong>Your models, your connection.</strong><p>Add an API endpoint from a hosted provider, Ollama, LM Studio, or your own gateway.</p></div>}
       {providers.map((provider, index) => {
-        const catalog = catalogs[provider.id] || emptyCatalog;
-        return <fieldset className="cw-custom-provider" key={provider.id}>
+        const stored = catalogs[provider.id];
+        const catalog = stored?.scope === catalogScope(provider, config) ? stored : emptyCatalog;
+        return <fieldset className="cw-custom-provider" key={provider.id} disabled={disabled}>
           <legend>{provider.name || `Provider ${index + 1}`}</legend>
           <div className="cw-custom-provider-topline">
             <span>{catalog.checking ? <><LoaderCircle size={12} className="animate-spin" /> Loading catalog</> : catalog.loaded ? <><Check size={12} /> Live catalog loaded</> : "OpenAI-compatible API"}</span>
@@ -83,7 +93,7 @@ export function CustomProvidersPanel({ providers, config, disabled = false, onCh
           </div>
         </fieldset>;
       })}
-      <button type="button" className="cw-add-provider-button" disabled={providers.length >= 20} onClick={() => onChange([...providers, { id: crypto.randomUUID(), name: `Custom API ${providers.length + 1}`, baseUrl: "", apiKey: "", model: "", stream: true }])}><Plus size={15} /> Add custom provider</button>
+      <button type="button" className="cw-add-provider-button" disabled={disabled || providers.length >= 20} onClick={() => onChange([...providers, { id: crypto.randomUUID(), name: `Custom API ${providers.length + 1}`, baseUrl: "", apiKey: "", model: "", stream: true }])}><Plus size={15} /> Add custom provider</button>
       <p className="cw-custom-provider-note">Loading models does not generate a paid response. If your API has no model catalog, use its exact model ID. Native Anthropic and Gemini APIs need an OpenAI-compatible adapter.</p>
     </section>
   );

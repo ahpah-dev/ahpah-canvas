@@ -24,7 +24,6 @@ import {
 import {
   listKiloModels,
   listOmniRouteModels,
-  sendGatewayPrompt,
   type GatewayModel,
   loadGatewayConfig,
   saveGatewayConfig,
@@ -42,8 +41,6 @@ import { useDialogFocus } from "../../utils/useDialogFocus";
 import { useDialogPresence } from "../../utils/useDialogPresence";
 import {
   autoConfigureGateways,
-  KILO_CODING_PROBE,
-  validateKiloCodingProbe,
   type SetupProgress,
 } from "../../utils/autoConfiguration";
 import { AppearancePanel } from "./AppearancePanel";
@@ -310,6 +307,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => { kiloCheckController.current?.abort(); kiloCheckController.current = null; };
   }, [isOpen, kiloModel, kiloKey, transport]);
 
+  // Other connection panels and the Code picker can change saved settings while
+  // this mounted dialog is closed. Start each opening with the current settings.
+  const [previousOpen, setPreviousOpen] = useState(isOpen);
+  if (previousOpen !== isOpen) {
+    setPreviousOpen(isOpen);
+    if (isOpen) {
+      const latest = loadGatewayConfig();
+      setOmniRouteUrl(latest.omniRouteUrl); setOmniRouteKey(latest.omniRouteKey); setOmniRouteModel(latest.omniRouteModel);
+      setKiloKey(latest.kiloKey); setKiloModel(latest.kiloModel);
+      setNineRouter({ nineRouterUrl: latest.nineRouterUrl ?? 'http://127.0.0.1:20128/v1', nineRouterKey: latest.nineRouterKey || '', nineRouterModel: latest.nineRouterModel || '' });
+      setCustomProviders(latest.customProviders || []); setTransport(latest.transport || 'auto');
+      setOmniModels([]); setKiloModels([]); setOmniState('idle'); setKiloState('idle');
+      setOmniError(''); setKiloError(''); setSaveError(''); setSaved(false);
+    }
+  }
+
   if (!present) return null;
 
   const config = {
@@ -349,7 +362,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setOmniState("checking");
     setOmniError("");
     try {
-      const models = await listOmniRouteModels(config, signal);
+      const models = await listOmniRouteModels(config, signal, true);
       signal.throwIfAborted();
       if (!models.length)
         throw new Error("Gateway responded, but no models were returned.");
@@ -386,7 +399,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setKiloState("checking");
     setKiloError("");
     try {
-      const models = await listKiloModels(signal, config);
+      const models = await listKiloModels(signal, config, true);
       signal.throwIfAborted();
       if (!models.length)
         throw new Error("Kilo responded, but no models were returned.");
@@ -395,14 +408,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         throw new Error(
           "The current Kilo catalog did not include kilo-auto/free.",
         );
-      if (config.kiloModel === "kilo-auto/free") {
-        const result = await sendGatewayPrompt('kilo', KILO_CODING_PROBE, config, {
-          signal, maxTokens: 1024, firstAnswerTimeoutMs: 5_000, validateResponse: validateKiloCodingProbe,
-        });
-        signal.throwIfAborted();
-        validateKiloCodingProbe(result.text);
-        setKiloState("verified");
-      } else setKiloState("connected");
+      setKiloState("connected");
     } catch (error) {
       if (controller.signal.aborted) return;
       setKiloState("error");
@@ -549,10 +555,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div id="connection-local" tabIndex={-1} role="group" aria-label="Local model setup" className="cw-connection-destination">
             <LocalModelsPanel active={isOpen} disabled={running || checkingCatalog || omniQuickRunning} providers={customProviders} onUse={(provider, destination) => {
               try {
-                const next = [...customProviders.filter(item => item.id !== provider.id), provider];
+                const latest = loadGatewayConfig();
+                const next = [...(latest.customProviders || []).filter(item => item.id !== provider.id), provider];
                 if (next.length > 20) throw new Error('Remove an unused custom provider before adding local AI.');
-                saveGatewayConfig({ ...config, customProviders: next, transport: 'auto' });
-                setCustomProviders(next); setTransport('auto'); setSaveError('');
+                saveGatewayConfig({ ...latest, customProviders: next, transport: 'auto' });
+                setCustomProviders(previous => [...previous.filter(item => item.id !== provider.id), provider]); setTransport('auto'); setSaveError('');
                 onToggleSimulated(false);
                 if (destination === 'code') {
                   localStorage.setItem('ahpah_engineering_provider', `custom:${provider.id}`);
@@ -710,7 +717,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }} /></div>
             <div id="connection-9router" tabIndex={-1} role="group" aria-label="9router connection" className="cw-connection-destination mb-5"><NineRouterPanel config={config} active={isOpen} disabled={running || checkingCatalog || omniQuickRunning} onChange={update => { setNineRouter(previous => ({ ...previous, ...update })); setSaved(false); }} onUse={destination => {
               try {
-                saveGatewayConfig(config); setSaveError(''); onToggleSimulated(false);
+                saveGatewayConfig({ ...loadGatewayConfig(), ...nineRouter, transport }); setSaveError(''); onToggleSimulated(false);
                 if (destination === 'code') {
                   localStorage.setItem('ahpah_engineering_provider', '9router');
                   window.dispatchEvent(new Event('ahpah-engineering-provider-selected'));
@@ -726,6 +733,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div><strong>Connection mode</strong><p>{gatewayTransport(config) === "direct" ? "API requests go directly from this browser to your provider. The provider must allow browser access (CORS)." : "The local server connects to your API, including providers without browser access."}</p></div>
                 <label><span className="sr-only">Connection mode</span><select aria-label="Connection mode" value={supportsLocalBridge() ? transport : "direct"} onChange={(event) => {
                   setTransport(event.target.value as GatewayTransport);
+                  setOmniModels([]); setKiloModels([]);
                   setOmniState("idle"); setKiloState("idle");
                 }}>
                   {supportsLocalBridge() && <option value="auto">Automatic · local gateway</option>}
@@ -757,9 +765,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       value={omniRouteUrl}
                       onChange={(value) => {
                         setOmniRouteUrl(value);
+                        setOmniModels([]);
                         setOmniState("idle");
                         setOmniError("");
-                        setOmniModels([]);
                       }}
                       placeholder="http://localhost:20128/v1"
                     />
@@ -769,6 +777,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={omniRouteKey}
                     onChange={(value) => {
                       setOmniRouteKey(value);
+                      setOmniModels([]);
                       setOmniState("idle");
                       setOmniError("");
                     }}
@@ -846,6 +855,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={kiloKey}
                     onChange={(value) => {
                       setKiloKey(value);
+                      setKiloModels([]);
                       setKiloState("idle");
                       setKiloError("");
                     }}
@@ -863,6 +873,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     models={kiloModels}
                     value={kiloModel}
                     disabled={running || checkingCatalog || omniQuickRunning}
+                    onRefresh={() => void checkKilo()}
+                    refreshing={kiloState === 'checking'}
                     onChange={(value) => {
                       setKiloModel(value);
                       setSaved(false);
@@ -892,7 +904,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       size={13}
                       className={kiloState === "checking" ? "animate-spin" : ""}
                     />
-                    {kiloModel === "kilo-auto/free" ? "Verify Auto Free" : "Check Kilo catalog"}
+                    Load live models
                   </button>
                 </div>
                 {!kiloKey && !kiloRequiresKey && (
@@ -906,7 +918,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div id="connection-custom" tabIndex={-1} role="group" aria-label="Custom API providers" className="cw-connection-destination"><CustomProvidersPanel providers={customProviders} config={config} disabled={running || checkingCatalog || omniQuickRunning} onChange={(next) => { setCustomProviders(next); setSaved(false); }} onUse={(provider) => {
                 try {
-                  saveGatewayConfig(config);
+                  const latest = loadGatewayConfig();
+                  saveGatewayConfig({ ...latest, transport, customProviders: [...(latest.customProviders || []).filter(item => item.id !== provider.id), provider] });
                   setSaveError("");
                   onAddCustomProvider(provider.id);
                 } catch (error) {

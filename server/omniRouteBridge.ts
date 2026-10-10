@@ -14,6 +14,7 @@ function terminate(child?: ChildProcess) {
   } else { try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill(); } }
 }
 type Emit = (event: { detail: string; phase: string }) => void;
+class LocalGatewayConflict extends Error {}
 
 export function createOmniRouteService(workspace: string, options: { port?: number; dataDirectory?: string; managedOnly?: boolean } = {}) {
   const port = options.port ?? 20128;
@@ -27,13 +28,17 @@ export function createOmniRouteService(workspace: string, options: { port?: numb
   async function running(signal: AbortSignal) {
     try {
       const health = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.any([signal, AbortSignal.timeout(1500)]), redirect: 'error' });
-      const healthData = health.ok ? await health.json().catch(() => null) as { status?: unknown } | null : null;
+      const healthData = health.ok ? await health.json().catch(() => null) as { status?: unknown; ok?: unknown } | null : null;
       if (healthData?.status === 'ok') return true;
+      // 9router shares OmniRoute's default port and also exposes /v1/models.
+      // Its public health shape differs: never reuse it as a running OmniRoute.
+      if (healthData?.ok === true)
+        throw new LocalGatewayConflict(`Port ${port} is occupied by another gateway such as 9router. Keep its connection in the 9router panel. Start OmniRoute on a different port (for example: omniroute --port 20130), enter http://127.0.0.1:20130/v1 in OmniRoute settings, and load its models.`);
       const response = await fetch(`${baseUrl}/models`, { signal: AbortSignal.any([signal, AbortSignal.timeout(1500)]), redirect: 'error' });
       if (!response.ok) return false;
       const data = await response.json() as { data?: unknown };
       return Array.isArray(data?.data);
-    } catch { signal.throwIfAborted(); return false; }
+    } catch (error) { signal.throwIfAborted(); if (error instanceof LocalGatewayConflict) throw error; return false; }
   }
   async function launcher() {
     const entries = [join(root, 'node_modules/omniroute/bin/omniroute.mjs'), resolve(dirname(process.execPath), '../lib/node_modules/omniroute/bin/omniroute.mjs'), ...(process.env.PATH || '').split(delimiter).filter(Boolean).map(directory => join(directory, 'node_modules/omniroute/bin/omniroute.mjs'))];

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ExternalLink, Eye, EyeOff, Radio, RefreshCw } from 'lucide-react';
 import { checkNineRouterConnection, listNineRouterModels, type GatewayConfig, type GatewayModel } from '../../utils/gateways';
 import { normalizeNineRouterUrl } from '../../utils/providerConfig';
+import { GatewayServiceError } from '../../utils/gatewayErrors';
 import { ModelSelector } from './ModelSelector';
 
 export type NineRouterConnection = Required<Pick<GatewayConfig, 'nineRouterUrl' | 'nineRouterKey' | 'nineRouterModel'>>;
@@ -17,7 +18,7 @@ export function NineRouterPanel({ config, active, disabled, onChange, onUse }: {
   const scope = JSON.stringify([url, key, config.transport]);
   const controller = useRef<AbortController | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [catalog, setCatalog] = useState<{ scope: string; models: GatewayModel[]; busy: boolean; loaded: boolean; error: string }>({ scope: '', models: [], busy: false, loaded: false, error: '' });
+  const [catalog, setCatalog] = useState<{ scope: string; models: GatewayModel[]; busy: boolean; loaded: boolean; auth?: 'accepted' | 'unverified' | 'rejected'; error: string }>({ scope: '', models: [], busy: false, loaded: false, error: '' });
   const current = catalog.scope === scope ? catalog : undefined;
   useEffect(() => () => { controller.current?.abort(); controller.current = null; }, [active, url, key, config.transport]);
 
@@ -32,10 +33,16 @@ export function NineRouterPanel({ config, active, disabled, onChange, onUse }: {
     controller.current = request;
     setCatalog({ scope, models: current?.models || [], busy: true, loaded: false, error: '' });
     try {
-      await checkNineRouterConnection(config, request.signal);
+      let auth: 'accepted' | 'unverified' | 'rejected';
+      let authError = '';
+      try { auth = await checkNineRouterConnection(config, request.signal); }
+      catch (error) {
+        if (!(error instanceof GatewayServiceError) || ![401, 403].includes(error.status || 0)) throw error;
+        auth = 'rejected'; authError = error.message;
+      }
       const models = await listNineRouterModels(config, request.signal);
       if (request.signal.aborted || controller.current !== request) return;
-      setCatalog({ scope, models, busy: false, loaded: true, error: models.length ? '' : 'The catalog is empty. Connect a provider or create a combo in the 9router dashboard, then refresh.' });
+      setCatalog({ scope, models, busy: false, loaded: true, auth, error: authError || (models.length ? '' : 'The catalog is empty. Connect a provider or create a combo in the 9router dashboard, then refresh.') });
     } catch (error) {
       if (request.signal.aborted || controller.current !== request) return;
       setCatalog({ scope, models: [], busy: false, loaded: false, error: error instanceof Error ? error.message : 'Could not load the 9router catalog.' });
@@ -55,10 +62,11 @@ export function NineRouterPanel({ config, active, disabled, onChange, onUse }: {
     </div>
     {urlError && <p className="cw-nine-router-error" role="alert">{urlError}</p>}
     <div className="cw-nine-router-model"><div><strong>Model or combo</strong><small>Exact IDs from your live catalog. Choose the route you want to use.</small></div><ModelSelector provider="9router" models={current?.models || []} value={model} onChange={nineRouterModel => onChange({ nineRouterModel })} onRefresh={refresh} refreshing={!!current?.busy} disabled={disabled || !!urlError} /></div>
-    <div className="cw-nine-router-actions"><button type="button" className="cw-soft-button" onClick={refresh} disabled={disabled || !!current?.busy || !!urlError}><RefreshCw size={13} className={current?.busy ? 'animate-spin' : ''} />{current?.busy ? 'Checking connection…' : current?.loaded ? 'Refresh models' : 'Check & load models'}</button>{dashboard && <a href={dashboard} target="_blank" rel="noreferrer">Open dashboard <ExternalLink size={12} /></a>}<span role="status">{current?.loaded && `Connection accepted · ${current.models.length} routes`}</span></div>
+    <div className="cw-nine-router-actions"><button type="button" className="cw-soft-button" onClick={refresh} disabled={disabled || !!current?.busy || !!urlError}><RefreshCw size={13} className={current?.busy ? 'animate-spin' : ''} />{current?.busy ? 'Checking connection…' : current?.loaded ? 'Refresh models' : 'Check & load models'}</button>{dashboard && <a href={dashboard} target="_blank" rel="noreferrer">Open dashboard <ExternalLink size={12} /></a>}<span role="status">{current?.loaded && `${current.auth === 'accepted' ? 'Gateway accepted' : current.auth === 'rejected' ? 'Key needs attention' : 'Catalog loaded'} · ${current.models.length} routes`}</span></div>
     <p className="cw-nine-router-key-help">Use the gateway key from <strong>9router → API Keys</strong>. Provider account keys stay in 9router → Providers. After editing, choose Save changes or Use in Code to apply the connection.</p>
     {current?.error && <p className="cw-nine-router-error" role="alert">{current.error}</p>}
+    {current?.loaded && <p className="cw-nine-router-key-help">{current.auth === 'unverified' ? 'This version does not support the authentication check. Your catalog loaded; authentication will be checked on your next task. ' : ''}Before coding, connect the selected model’s provider in <strong>9router → Providers</strong>. Catalog entries can include providers without an active account.</p>}
     <details className="cw-nine-router-guide"><summary>Connect 9router</summary><ol><li>Install the official package with <code>npm install -g 9router</code>, then run <code>9router</code>.</li><li>Open its dashboard, connect your upstream providers, and copy a gateway API key.</li><li>Enter the URL and key here, load models, and select a model or combo.</li></ol><p>9router and OmniRoute both default to port 20128. If you run both, give them different ports and enter the correct URL here. Local HTTP gateways need the local AhPah app; the published site needs an HTTPS endpoint with browser access.</p><a href="https://github.com/decolua/9router" target="_blank" rel="noreferrer">Official setup documentation <ExternalLink size={12} /></a></details>
-    <footer><span>Catalog refreshes use no completion tokens. Provider limits still apply.</span><div><button type="button" className="cw-soft-button" disabled={disabled || !model.trim() || !!urlError || !!current?.busy} onClick={() => onUse('canvas')}>Add to Canvas</button><button type="button" className="cw-primary-button" disabled={disabled || !model.trim() || !!urlError || !!current?.busy} onClick={() => onUse('code')}>Use in Code <ArrowRight size={13} /></button></div></footer>
+    <footer><span>Catalog refreshes use no completion tokens. Provider limits still apply.</span><div><button type="button" className="cw-soft-button" disabled={disabled || !model.trim() || !!urlError || !!current?.busy || !!current?.error} onClick={() => onUse('canvas')}>Add to Canvas</button><button type="button" className="cw-primary-button" disabled={disabled || !model.trim() || !!urlError || !!current?.busy || !!current?.error} onClick={() => onUse('code')}>Use in Code <ArrowRight size={13} /></button></div></footer>
   </section>;
 }

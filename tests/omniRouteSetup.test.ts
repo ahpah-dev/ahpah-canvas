@@ -130,6 +130,15 @@ test('authenticated gateways are recognized by their public health endpoint', as
   service.close();
 });
 
+test('OmniRoute setup never mistakes the 9router service for OmniRoute on their shared default port', async t => {
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: unknown) => { calls.push(String(url)); return json({ ok: true }); });
+  const service = createOmniRouteService(process.cwd());
+  await assert.rejects(service.start(new AbortController().signal, () => {}), /occupied by another gateway.*9router/);
+  assert.deepEqual(calls, ['http://127.0.0.1:20128/api/health']);
+  service.close();
+});
+
 test('local installation accepts only same-origin loopback POST requests', async t => {
   let starts = 0;
   const middleware = createOmniRouteMiddleware({ async start(_signal, emit) { starts++; emit({ phase: 'starting', detail: 'Starting' }); return { baseUrl: 'http://127.0.0.1:20128/v1', reused: false }; } });

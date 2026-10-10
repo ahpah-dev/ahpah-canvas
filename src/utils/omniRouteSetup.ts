@@ -54,7 +54,7 @@ export async function oneClickOmniRouteSetup(config: GatewayConfig, signal: Abor
       signal.throwIfAborted();
       onProgress({ phase: 'discovering', detail: `Loading live models from ${candidate.omniRouteUrl}…` });
       try {
-        models = await listOmniRouteModels(candidate, AbortSignal.any([signal, AbortSignal.timeout(5000)]));
+        models = await listOmniRouteModels(candidate, AbortSignal.any([signal, AbortSignal.timeout(5000)]), true);
         discovered = candidate;
         break;
       } catch (error) {

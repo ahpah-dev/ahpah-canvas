@@ -9,8 +9,14 @@ export function selectCodexModel(model: string) {
   window.dispatchEvent(new Event("ahpah-gateway-config-changed"));
 }
 async function request(path: string, method = "GET", signal?: AbortSignal): Promise<CodexStatus> {
-  const response = await fetch(`/api/codex/${path}`, { method, signal: signal ?? AbortSignal.timeout(150_000), redirect: "error" });
-  const value = await response.json();
+  const response = await fetch(`/api/codex/${path}`, { method, signal: signal ?? AbortSignal.timeout(150_000), redirect: "error", cache: 'no-store' });
+  let value;
+  try { value = await response.json(); }
+  catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new Error('The local Codex bridge is unavailable. Launch Start AhPah.bat on your computer; Codex cannot connect through GitHub Pages.');
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Codex returned invalid connection data. Restart the local app and retry.');
   if (!response.ok) throw new Error(value.error || "Could not reach local Codex. Start the app using Start AhPah.bat.");
   return value;
 }

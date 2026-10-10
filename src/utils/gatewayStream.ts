@@ -1,4 +1,4 @@
-import { GatewayServiceError } from "./gatewayErrors.ts";
+import { GatewayServiceError, gatewayErrorStatus } from "./gatewayErrors.ts";
 
 export type GatewayProgress = {
   text: string;
@@ -51,7 +51,7 @@ export async function readGatewayStream(
     if (!chunk || typeof chunk !== "object")
       throw new Error("The gateway sent an invalid stream event.");
     if (chunk.error)
-      throw new GatewayServiceError(`Gateway error: ${typeof chunk.error === "string" ? chunk.error : chunk.error.message || "Provider disconnected."}`, Number(chunk.error.code) || 502);
+      throw new GatewayServiceError(`Gateway error: ${typeof chunk.error === "string" ? chunk.error : chunk.error.message || "Provider disconnected."}`, gatewayErrorStatus(chunk.error));
     if (typeof chunk.model === "string") model = chunk.model;
     if (chunk.usage) usage = chunk.usage;
     if (chunk.choices !== undefined && !Array.isArray(chunk.choices))
@@ -60,7 +60,7 @@ export async function readGatewayStream(
     if (!choice) return; // Usage-only final chunks have no choices.
     hasChoice = true;
     if (choice.error || choice.finish_reason === "error")
-      throw new GatewayServiceError(`Gateway error: ${choice.error?.message || "Provider disconnected before completing the answer."}`, Number(choice.error?.code) || 502);
+      throw new GatewayServiceError(`Gateway error: ${typeof choice.error === 'string' ? choice.error : choice.error?.message || "Provider disconnected before completing the answer."}`, gatewayErrorStatus(choice.error));
     const delta = choice.delta || choice.message || {};
     if (typeof delta.content === "string") text += delta.content;
     if (typeof delta.refusal === "string") refusal += delta.refusal;

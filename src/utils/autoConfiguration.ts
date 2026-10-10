@@ -7,6 +7,7 @@ import {
 } from "./gateways.ts";
 import { isFreeModel } from "./modelCatalog.ts";
 import { parseAgentActions } from "./agentRuntime.ts";
+import { redactProviderError } from './providerConfig.ts';
 import { freeModelCandidates, omniGatewayAuthFailure, omniModelProvider, omniProviderHelp, unavailableOmniProvider } from './omniRoutePolicy.ts';
 export { freeModelCandidates } from './omniRoutePolicy.ts';
 
@@ -33,10 +34,7 @@ export type ProviderSetup = {
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Gateway request failed.";
 function redact(text: string, config: GatewayConfig) {
-  return [config.omniRouteKey, config.kiloKey, ...(config.customProviders || []).map(provider => provider.apiKey)]
-    .filter(Boolean)
-    .reduce((value, key) => value.split(key).join("[redacted]"), text)
-    .slice(0, 500);
+  return redactProviderError(text, [config.omniRouteKey, config.kiloKey, config.nineRouterKey || '', ...(config.customProviders || []).map(provider => provider.apiKey)]).slice(0, 500);
 }
 
 export async function verifyOmniRouteModels(config: GatewayConfig, models: GatewayModel[], signal: AbortSignal, onProgress: (detail: string, attempt: number, total: number) => void) {
@@ -129,7 +127,7 @@ export async function autoConfigureGateways(
             ? "Loading the current Kilo catalog…"
             : "Discovering your configured gateway…",
       });
-      if (provider === "kilo") models = await listKiloModels(timeout(10_000), config);
+      if (provider === "kilo") models = await listKiloModels(timeout(10_000), config, true);
       else {
         for (const candidate of discoveryCandidates(config)) {
           signal.throwIfAborted();
@@ -139,7 +137,7 @@ export async function autoConfigureGateways(
             detail: `Checking ${candidate.omniRouteUrl}`,
           });
           try {
-            models = await listOmniRouteModels(candidate, timeout(5_000));
+            models = await listOmniRouteModels(candidate, timeout(5_000), true);
             if (models.length) {
               selected = candidate;
               break;

@@ -41,15 +41,17 @@ export function normalizeNineRouterUrl(value: string): string {
 }
 
 /** Accept a copied token or Authorization value, without changing the token itself. */
-export function normalizeNineRouterKey(value: string): string {
+export function normalizeApiKey(value: string): string {
   const unwrap = (text: string) => text.length >= 2 &&
     ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'")))
     ? text.slice(1, -1).trim() : text;
   const key = unwrap(unwrap(value.trim()).replace(/^Bearer\s+/i, '').trim());
   if (key && /[^\x21-\x7e]/.test(key))
-    throw new Error('The 9router key contains spaces or invisible characters inside the token. Copy the complete gateway key from its dashboard.');
+    throw new Error('The API key contains spaces or invisible characters inside the token. Copy the complete key from the provider dashboard.');
   return key;
 }
+
+export const normalizeNineRouterKey = normalizeApiKey;
 
 export function normalizeCustomProviders(value: unknown): CustomProvider[] {
   if (!Array.isArray(value)) return [];
@@ -71,5 +73,8 @@ export function normalizeCustomProviders(value: unknown): CustomProvider[] {
 }
 
 export function redactProviderError(message: string, keys: string[]): string {
-  return keys.filter(Boolean).reduce((text, key) => text.split(key).join("[redacted]"), message).slice(0, 1000);
+  const tokens = keys.flatMap(key => {
+    try { return [key, normalizeApiKey(key)]; } catch { return [key]; }
+  }).filter(Boolean).sort((a, b) => b.length - a.length);
+  return tokens.reduce((text, key) => text.split(key).join("[redacted]"), message).slice(0, 1000);
 }

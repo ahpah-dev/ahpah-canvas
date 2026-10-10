@@ -165,7 +165,7 @@ export async function gatewayMiddleware(
     if (controller.signal.aborted) return;
     const message = (upstreamSignal?.aborted && upstreamSignal.reason?.name === "TimeoutError") || (error instanceof Error && error.name === "TimeoutError")
       ? method === "POST" ? localOllama ? LOCAL_COMPLETION_TIMEOUT_MESSAGE : COMPLETION_TIMEOUT_MESSAGE : "The model catalog did not respond within 15 seconds."
-      : `Could not reach ${match[1] === "kilo" ? "Kilo" : match[1] === "custom" ? "your API provider" : "OmniRoute"}. Check the gateway URL and your network connection.`;
+      : `Could not reach ${match[1] === "kilo" ? "Kilo" : match[1] === "custom" ? "your API provider" : match[1] === '9router' ? '9router' : "OmniRoute"}. Check the gateway URL and your network connection.`;
     if (response.headersSent) {
       if (!response.destroyed)
         response.end(`data: ${JSON.stringify({ error: { message } })}\n\ndata: [DONE]\n\n`);
