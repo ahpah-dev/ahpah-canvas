@@ -14,10 +14,11 @@ export type FolderSaveResult = { saved: true; destinations: string[] } | { saved
 export interface FolderState {
   supported: boolean; name: string; status: 'disconnected' | 'connecting' | 'permission' | 'connected' | 'saving';
   lastSaved: string; error: string; pendingCount: number; pendingPaths: string[];
+  connectionRevision: number; contentsRevision: number;
 }
 let folder: FolderHandle | null = null;
 let fingerprints: Record<string, string> = {};
-let state: FolderState = { supported: typeof window !== 'undefined' && typeof (window as PickerWindow).showDirectoryPicker === 'function', name: '', status: 'disconnected', lastSaved: '', error: '', pendingCount: 0, pendingPaths: [] };
+let state: FolderState = { supported: typeof window !== 'undefined' && typeof (window as PickerWindow).showDirectoryPicker === 'function', name: '', status: 'disconnected', lastSaved: '', error: '', pendingCount: 0, pendingPaths: [], connectionRevision: 0, contentsRevision: 0 };
 const pending = new Map<string, PendingFile>();
 const groups = new Map<string, SaveGroup>();
 const listeners = new Set<() => void>();
@@ -37,6 +38,7 @@ const update = (value: Partial<FolderState>) => { state = { ...state, ...value }
 const updatePending = () => update({ pendingCount: pending.size, pendingPaths: [...pending.values()].map(file => file.path) });
 export const folderSnapshot = () => state;
 export const subscribeFolder = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+export const openConnectedFolderBrowser = () => window.dispatchEvent(new Event('ahpah-browse-connected-folder'));
 
 async function databaseOperation<T>(mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
@@ -121,7 +123,7 @@ export function restoreConnectedFolder(): Promise<void> {
       if (session !== generation) return;
       folder = saved;
       fingerprints = 'handle' in record && record.fingerprints && typeof record.fingerprints === 'object' ? record.fingerprints : {};
-      update({ name: saved.name, status: permission === 'granted' ? 'connected' : 'permission' });
+      update({ name: saved.name, status: permission === 'granted' ? 'connected' : 'permission', connectionRevision: generation });
       if (permission === 'granted') await flushPendingFiles();
     } catch { /* A remembered connection is optional; new connections still work. */ }
   })();
@@ -146,7 +148,7 @@ export async function connectFolder(change = false): Promise<void> {
     checkActive(session);
     folder = selected;
     if (!sameFolder) fingerprints = {};
-    update({ name: selected.name, status: 'connected', lastSaved: '', error: '' });
+    update({ name: selected.name, status: 'connected', lastSaved: '', error: '', connectionRevision: generation });
     try { await persistConnection(); } catch { if (session === generation) update({ error: 'Connected for this session. The browser could not remember this folder for next time.' }); }
     if (session === generation) {
       await flushPendingFiles();
@@ -155,13 +157,13 @@ export async function connectFolder(change = false): Promise<void> {
     }
   } catch (error) {
     if (session !== generation) return;
-    update({ status: previous.status, error: error instanceof DOMException && error.name === 'AbortError' ? '' : error instanceof Error ? error.message : 'Could not connect the folder.' });
+    update({ status: previous.status, connectionRevision: generation, error: error instanceof DOMException && error.name === 'AbortError' ? '' : error instanceof Error ? error.message : 'Could not connect the folder.' });
     if (previous.status === 'connected') await flushPendingFiles();
   }
 }
 export async function disconnectFolder(): Promise<void> {
   ++generation; folder = null; fingerprints = {};
-  update({ name: '', status: 'disconnected', lastSaved: '', error: '' });
+  update({ name: '', status: 'disconnected', lastSaved: '', error: '', connectionRevision: generation });
   // Keep pending source: disconnecting must not throw away files already created by the agent.
   try { await persistConnection(); } catch { update({ error: 'Disconnected for this session. Browser storage could not forget the previous connection.' }); }
 }
@@ -170,6 +172,58 @@ export async function clearPendingFolderFiles(): Promise<void> {
   ++pendingRevision;
   try { await mutatePending(next => next.clear()); groups.clear(); }
   catch { update({ error: 'Browser storage could not clear the pending queue. No queued files were discarded.' }); }
+}
+
+export interface ConnectedFolderEntry { name: string; path: string; kind: 'directory' | 'file' }
+const browserNameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+function browserPath(path: string): string[] {
+  // Browsing includes every real entry, independently of the agent's source-file restrictions.
+  if (!path) return [];
+  const parts = path.split('/');
+  if (path.startsWith('/') || path.includes('\\') || parts.some(part => !part || part === '.' || part === '..' || [...part].some(character => character.charCodeAt(0) < 32)))
+    throw new Error('Invalid connected-folder path.');
+  return parts;
+}
+
+async function browserDirectory(path: string, signal?: AbortSignal): Promise<{ directory: FileSystemDirectoryHandle; session: number }> {
+  const parts = browserPath(path);
+  const session = generation;
+  const target = folder;
+  if (!target || !['connected', 'saving'].includes(state.status)) throw new Error('Reconnect your folder to browse its files.');
+  checkActive(session, signal);
+  let directory: FileSystemDirectoryHandle = target;
+  for (const part of parts) {
+    directory = await directory.getDirectoryHandle(part);
+    checkActive(session, signal);
+  }
+  return { directory, session };
+}
+
+/** Enumerate only the directory being viewed; never read file contents or contact a model. */
+export async function listConnectedFolderEntries(path = '', signal?: AbortSignal): Promise<ConnectedFolderEntry[]> {
+  const { directory, session } = await browserDirectory(path, signal);
+  const entries: ConnectedFolderEntry[] = [];
+  const iterable = directory as FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemDirectoryHandle | FileSystemFileHandle> };
+  for await (const entry of iterable.values()) {
+    checkActive(session, signal);
+    entries.push({ name: entry.name, path: path ? `${path}/${entry.name}` : entry.name, kind: entry.kind });
+  }
+  checkActive(session, signal);
+  return entries.sort((a, b) => a.kind !== b.kind ? a.kind === 'directory' ? -1 : 1 : browserNameOrder.compare(a.name, b.name));
+}
+
+/** The File is read lazily by the viewer, and is never automatically added to agent context. */
+export async function readConnectedFolderFile(path: string, signal?: AbortSignal): Promise<File> {
+  const parts = browserPath(path);
+  const name = parts.pop();
+  if (!name) throw new Error('Choose a file to open.');
+  const { directory, session } = await browserDirectory(parts.join('/'), signal);
+  const handle = await directory.getFileHandle(name);
+  checkActive(session, signal);
+  const file = await handle.getFile();
+  checkActive(session, signal);
+  return file;
 }
 async function directoryFor(target: FileSystemDirectoryHandle, path: string, create: boolean): Promise<{ directory: FileSystemDirectoryHandle; filename: string }> {
   const parts = path.split('/');
@@ -250,12 +304,12 @@ async function saveFiles(files: EngineeringFile[], html: boolean, signal?: Abort
         try { await persistConnection(); } catch { if (session === generation) update({ error: 'File saved. Browser storage could not remember its conflict protection for the next session.' }); }
         if (session === generation) update({ lastSaved: saved.at(-1)! });
       }
-      if (session === generation) update({ status: 'connected' });
+      if (session === generation) update({ status: 'connected', contentsRevision: state.contentsRevision + 1 });
       return saved;
     } catch (error) {
       const original = error instanceof Error ? error.message : 'The files could not be written to your PC.';
       const message = `${original}${saved.length ? ` ${saved.length} of ${files.length} files were saved before the operation stopped: ${saved.join(', ')}.` : ' No source file writes were confirmed.'}`;
-      if (session === generation) update({ status: state.status === 'permission' || permissionError(error) ? 'permission' : 'connected', error: message });
+      if (session === generation) update({ status: state.status === 'permission' || permissionError(error) ? 'permission' : 'connected', error: message, ...(saved.length ? { contentsRevision: state.contentsRevision + 1 } : {}) });
       if (signal?.aborted) throw signal.reason ?? new DOMException('Saving was cancelled.', 'AbortError');
       throw new Error(message);
     }

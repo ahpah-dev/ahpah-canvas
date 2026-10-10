@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, Check, Code2, FileCode2, FolderOpen, GitCompareArrows, Loader2, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X, Download, Eye, ChevronRight, ChevronDown, ShieldCheck, Undo2, AlertCircle, Circle, Files, ExternalLink, Smartphone, Monitor, Search, Radio, Bug, BookOpen, Cpu } from 'lucide-react';
 import type { AgentActivity, AgentPhase, AgentSender, EngineeringChangeSet, EngineeringProject, EngineeringProvider, ProjectChange } from '../../types/engineering';
@@ -7,7 +7,7 @@ import { AGENT_MAX_GOAL_CHARS, runEngineeringAgent } from '../../utils/agentRunt
 import { discoverProjectExecution, runProjectCommand } from '../../utils/projectExecution';
 import { useDialogFocus } from '../../utils/useDialogFocus';
 import { htmlExportRequest, htmlTitle, projectHtmlArtifact } from '../../utils/htmlExport';
-import { autoSaveFilesToFolder, saveHtmlToFolder } from '../../utils/connectedFolder';
+import { autoSaveFilesToFolder, saveHtmlToFolder, folderSnapshot, subscribeFolder, openConnectedFolderBrowser } from '../../utils/connectedFolder';
 import { SourceEditor } from './SourceEditor';
 import { CodeCommandPalette, type WorkspaceCommand } from './CodeCommandPalette';
 import { sourceLanguage } from '../../utils/sourceHighlight';
@@ -258,6 +258,7 @@ function EngineeringProviderPicker({ providers, value, disabled, dismiss, onChan
 }
 
 export function CodingWorkspace({ send, providers, onOpenSettings, localExecution, canvasProject, canvasCommands, onCanvasProjectChange }: CodingWorkspaceProps) {
+  const connectedFolder = useSyncExternalStore(subscribeFolder, folderSnapshot);
   const [initial] = useState(loadWorkspace);
   const [project, setProject] = useState(initial.project);
   const [pending, setPending] = useState<EngineeringChangeSet | null>(initial.pending);
@@ -713,6 +714,7 @@ export function CodingWorkspace({ send, providers, onOpenSettings, localExecutio
       <aside id="eng-file-explorer" className={`eng-files ${sidebarOpen ? 'eng-files-open' : ''}`} aria-label="Project files">
         <div className="eng-section-heading"><span><Files size={13} /> EXPLORER</span><div><button title="Import files" aria-label="Import source files" onClick={() => fileInput.current?.click()} disabled={busy || executionBusy || folderSaving}><Upload size={13} /></button><button title="New file" aria-label="New source file" onClick={() => { setFileDialog('add'); setNewPath(''); }} disabled={folderSaving}><Plus size={14} /></button><button className="eng-sidebar-close" aria-label="Close file explorer" onClick={() => { setSidebarOpen(false); explorerToggle.current?.focus(); }}><X size={14} /></button></div></div>
         <label className="eng-file-search"><Search size={13} aria-hidden="true" /><input ref={fileSearch} type="search" aria-label="Search project files" placeholder="Find a file…" value={fileQuery} onChange={event => setFileQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && visibleFiles[0]) { event.preventDefault(); openFile(visibleFiles[0].path); } else if (event.key === 'Escape' && fileQuery) { event.preventDefault(); event.stopPropagation(); setFileQuery(''); } }} /></label>
+        {connectedFolder.name && <button type="button" className="eng-connected-folder" onClick={openConnectedFolderBrowser} title={`Browse all files in ${connectedFolder.name}`}><FolderOpen size={14} /><span><strong>{connectedFolder.name}</strong><small>{connectedFolder.status === 'permission' ? 'Reconnect to browse files' : 'Browse connected folder'}</small></span><ChevronRight size={12} /></button>}
         <div className="eng-file-tree">
           <span className="eng-tree-root"><ChevronDown size={12} /> {project.name}<small>{projectFiles.length}</small></span>
           {visibleFiles.map(file => <button key={file.path} className={`eng-file ${activeFile?.path === file.path ? 'eng-file-active' : ''}`} aria-current={activeFile?.path === file.path ? 'true' : undefined} onClick={() => openFile(file.path)} title={file.path}><FileCode2 size={14} /><span>{file.path}</span>{pending?.changes.some(change => change.path === file.path) ? <span className="eng-file-change-dot" title="Proposed change" /> : <small className="eng-file-kind" aria-hidden="true">{sourceBadge(file.path)}</small>}</button>)}
