@@ -24,7 +24,9 @@ import {
   Focus,
   ArrowUpRight,
   ShieldCheck,
+  ClipboardList,
 } from "lucide-react";
+import { CanvasBriefDialog } from "./CanvasBriefDialog";
 import type {
   CanvasCard,
   Connection,
@@ -147,6 +149,7 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
   const [handTool, setHandTool] = useState(false);
   const [moving, setMoving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
   const addToggle = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{
@@ -566,7 +569,22 @@ export function InfiniteCanvas(props: InfiniteCanvasProps) {
         >
           <Maximize2 size={15} />
         </button>
+        <i />
+        <button
+          aria-label="Canvas brief"
+          title="Write a handoff summary of this canvas"
+          onClick={() => setBriefOpen(true)}
+        >
+          <ClipboardList size={15} />
+        </button>
       </div>
+      {briefOpen && (
+        <CanvasBriefDialog
+          cards={cards}
+          connections={props.connections}
+          onClose={() => setBriefOpen(false)}
+        />
+      )}
       <div className="cw-minimap">
         <span>
           WORKSPACE MAP <Focus size={10} />

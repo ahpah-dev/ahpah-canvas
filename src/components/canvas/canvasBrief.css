@@ -1,0 +1,134 @@
+/* Canvas brief dialog: a Markdown handoff of the whole canvas. */
+.cw-brief-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #05070bb8;
+  backdrop-filter: blur(4px);
+}
+
+.cw-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(680px, 100%);
+  max-height: min(78vh, 720px);
+  min-height: 0;
+  padding: 22px;
+  border: 1px solid #ffffff1c;
+  border-radius: 14px;
+  background: #14181f;
+  color: #e6eaf0;
+  box-shadow: 0 30px 80px -20px #000000cc;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.cw-brief header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cw-brief header span {
+  display: block;
+  color: #9aa5b5;
+  font: 600 9px/1.5 ui-monospace, monospace;
+  letter-spacing: 0.1em;
+}
+
+.cw-brief h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 550;
+  letter-spacing: -0.03em;
+}
+
+.cw-brief header button,
+.cw-brief footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #ffffff1c;
+  border-radius: 8px;
+  background: #1b2029;
+  color: #c5cfdd;
+  font: 550 12px/1 Inter, -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+.cw-brief header button {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.cw-brief footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cw-brief footer button:first-child {
+  background: #e5ebf5;
+  border-color: #e5ebf5;
+  color: #131a26;
+}
+
+.cw-brief header button:hover,
+.cw-brief footer button:hover {
+  filter: brightness(1.12);
+}
+
+.cw-brief p {
+  margin: 0;
+  color: #b6bdc9;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.cw-brief header,
+.cw-brief p,
+.cw-brief footer {
+  flex: none;
+}
+
+.cw-brief pre {
+  /* Let the preview shrink and scroll so the buttons always stay inside the card. */
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #10141a;
+  color: #cad3e0;
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cw-brief header button:focus-visible,
+.cw-brief footer button:focus-visible,
+.cw-brief pre:focus-visible {
+  outline: 2px solid #b4c8e5;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .cw-brief-backdrop { padding: 14px; }
+  .cw-brief { padding: 18px; }
+  .cw-brief footer { flex-wrap: wrap; }
+  .cw-brief footer button { flex: 1; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-brief header button,
+  .cw-brief footer button { transition: none; }
+}
