@@ -207,13 +207,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchCode, onLaunch
             <div className="lp-hero-message">
               <button className="lp-announcement lp-enter" onClick={onOpenOneClickSetup}><span><span className="lp-studio-dot" /> THE OPEN SOURCE ENGINEERING STUDIO</span><ArrowRight size={12} /></button>
               <h1 className="lp-enter lp-enter-1">Make your<br />next <span>big thing.</span></h1>
-              <p className="lp-enter lp-enter-2">An idea deserves more than a conversation.<br />Build with agents, work with real files, and own every change.</p>
+              <p className="lp-enter lp-enter-2">An idea deserves more than a conversation. <br />Build with agents, work with real files, and own every change.</p>
               <div className="lp-hero-actions lp-enter lp-enter-3"><button className="lp-button lp-button-primary" onClick={onLaunchCode}>Start building <ArrowUpRight size={17} /></button><a className="lp-button lp-button-secondary" href="#workspace" onClick={showWorkspace}>See workspace <ArrowDown size={15} /></a></div>
               <div className="lp-hero-details lp-enter lp-enter-3"><span><Check size={12} /> Free &amp; MIT licensed</span><span><Check size={12} /> Your models</span><span><Check size={12} /> Your final say</span></div>
             </div>
             <aside className="lp-start-panel lp-enter lp-enter-2" aria-label="Choose your starting point">
               <div className="lp-studio-panel-top"><span className="lp-start-label">YOUR WORK, IN ONE PLACE</span><span>01 — 03</span></div>
-              <h2>Less friction.<br />More forward.</h2>
+              <h2>Less friction. <br />More forward.</h2>
               <button onClick={onLaunchCode}><span className="lp-start-index">01</span><Code2 size={19} /><span><strong>A focused Code workspace</strong><small>Write, review, preview, and save to your PC</small></span><ArrowUpRight size={16} /></button>
               <button onClick={onLaunchCanvas}><span className="lp-start-index">02</span><Layers3 size={19} /><span><strong>Room to think in Canvas</strong><small>Your agents, decisions, and project context</small></span><ArrowUpRight size={16} /></button>
               <button onClick={onOpenOneClickSetup}><span className="lp-start-index">03</span><Laptop size={19} /><span><strong>Intelligence on your terms</strong><small>Local models, Codex, gateways, and your API</small></span><ArrowUpRight size={16} /></button>
